@@ -42,6 +42,61 @@ namespace sandbox
 		VkQueue						graphics_queue;
 		VkQueue						present_queue;
 
+
+		struct queue_family_indices
+		{
+			std::optional<unsigned> graphics_family;
+			std::optional<unsigned> present_family;
+
+			bool is_complete()
+			{
+				return graphics_family.has_value() && present_family.has_value();
+			}
+		};
+
+		queue_family_indices find_queue_families(VkPhysicalDevice dev)
+		{
+			queue_family_indices indices;
+
+			unsigned fam_count = 0;
+			vkGetPhysicalDeviceQueueFamilyProperties2(dev, &fam_count, nullptr);
+
+			std::vector<VkQueueFamilyProperties2> queue_fams(fam_count);
+
+			for (auto& q : queue_fams)
+			{
+				q.sType = VK_STRUCTURE_TYPE_QUEUE_FAMILY_PROPERTIES_2;
+			}
+
+			vkGetPhysicalDeviceQueueFamilyProperties2(dev, &fam_count, queue_fams.data());
+
+
+
+			// find at least one queue family that supports VK_QUEUE_GRAPHICS_BIT
+			int i = 0;
+			for (const auto& qf : queue_fams)
+			{
+				if (qf.queueFamilyProperties.queueFlags & VK_QUEUE_GRAPHICS_BIT)
+				{
+					indices.graphics_family = i;
+				}
+
+				VkBool32 present_support = false;
+				vkGetPhysicalDeviceSurfaceSupportKHR(dev, i, surface, &present_support);
+
+				if (present_support)
+					indices.present_family = i;
+
+
+				if (indices.is_complete())
+					break;
+
+				i++;
+			}
+
+			return indices;
+		}
+
 		namespace debug
 		{
 			const std::vector<const char*> validation_layers =
@@ -163,6 +218,15 @@ namespace sandbox
 		
 		namespace KHR
 		{
+			VkSwapchainKHR swap_chain;
+
+			struct swap_chain_support
+			{
+				VkSurfaceCapabilitiesKHR			capabilities;
+				std::vector<VkSurfaceFormatKHR>		formats;
+				std::vector<VkPresentModeKHR>		present_modes;
+			};
+
 			/*
 				See: https://vulkan-tutorial.com/en/Drawing_a_triangle/Presentation/Window_surface
 				For non-glfw create surface
@@ -174,26 +238,149 @@ namespace sandbox
 					throw std::runtime_error("Failed to create  window surface!");
 				}
 			}
-		}
 
-		struct queue_family_indices
-		{
-			std::optional<unsigned> graphics_family;
-			std::optional<unsigned> present_family;
-
-			bool is_complete()
+			VkSurfaceFormatKHR choose_swap_surface_fmt(const std::vector<VkSurfaceFormatKHR>& available_fmts)
 			{
-				return graphics_family.has_value() && present_family.has_value();
+				for (const auto& fmt : available_fmts)
+				{
+					if (VK_FORMAT_R8G8B8A8_SRGB == fmt.format &&
+						VK_COLOR_SPACE_SRGB_NONLINEAR_KHR == fmt.colorSpace)
+					{
+						return fmt;
+					}
+				}
+
+				return available_fmts[0];
 			}
-		};
 
-		struct swap_chain_support
-		{
-			VkSurfaceCapabilitiesKHR			capabilities;
-			std::vector<VkSurfaceFormatKHR>		formats;
-			std::vector<VkPresentModeKHR>		present_modes;
-		};
+			VkPresentModeKHR choose_swap_present_mode(const std::vector<VkPresentModeKHR>& available_modes)
+			{
+				for (const auto& mode : available_modes)
+				{
+					if (VK_PRESENT_MODE_MAILBOX_KHR == mode) // triple buffering
+						return mode;
+				}
 
+				return VK_PRESENT_MODE_FIFO_KHR;
+			}
+
+			VkExtent2D choose_swap_extent(const VkSurfaceCapabilitiesKHR& capabilities)
+			{
+				if (std::numeric_limits<unsigned>::max() != capabilities.currentExtent.width)
+				{
+					return capabilities.currentExtent;
+				}
+				else
+				{
+					int width, height;
+
+					glfwGetFramebufferSize(glfw::window, &width, &height);
+
+					VkExtent2D actual_extent = {
+						static_cast<unsigned>(width),
+						static_cast<unsigned>(height)
+					};
+
+					actual_extent.width = std::max(capabilities.minImageExtent.width,
+						std::min(capabilities.maxImageExtent.width, actual_extent.width));
+
+					actual_extent.height = std::max(capabilities.minImageExtent.height,
+						std::min(capabilities.maxImageExtent.height, actual_extent.height));
+
+					return actual_extent;
+				}
+			}
+
+			swap_chain_support query_sw_support(VkPhysicalDevice dev)
+			{
+				KHR::swap_chain_support details{};
+
+				vkGetPhysicalDeviceSurfaceCapabilitiesKHR(dev, surface, &details.capabilities);
+
+				unsigned fmt_count = 0;
+				vkGetPhysicalDeviceSurfaceFormatsKHR(dev, surface, &fmt_count, nullptr);
+
+				if (0 != fmt_count)
+				{
+					details.formats.resize(fmt_count);
+					vkGetPhysicalDeviceSurfaceFormatsKHR(dev, surface, &fmt_count, details.formats.data());
+				}
+
+				unsigned pm_count = 0;
+				vkGetPhysicalDeviceSurfacePresentModesKHR(dev, surface, &pm_count, nullptr);
+
+				if (0 != pm_count)
+				{
+					details.present_modes.resize(pm_count);
+					vkGetPhysicalDeviceSurfacePresentModesKHR(dev, surface, &pm_count, details.present_modes.data());
+				}
+
+				return details;
+			}
+
+			void create_swap_chain()
+			{
+				swap_chain_support support = query_sw_support(pd);
+
+				VkSurfaceFormatKHR surface_fmt = choose_swap_surface_fmt(support.formats);
+				VkPresentModeKHR present_mode = choose_swap_present_mode(support.present_modes);
+				VkExtent2D extent = choose_swap_extent(support.capabilities);
+
+				unsigned image_count = support.capabilities.minImageCount + 1;
+
+				if (support.capabilities.maxImageCount > 0 && image_count > support.capabilities.maxImageCount)
+					image_count = support.capabilities.maxImageCount;
+				
+				VkSwapchainCreateInfoKHR create_info{};
+				create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+				create_info.surface = surface;
+
+				create_info.minImageCount = image_count;
+				create_info.imageFormat = surface_fmt.format;
+				create_info.imageColorSpace = surface_fmt.colorSpace;
+				create_info.imageExtent = extent;
+				create_info.imageArrayLayers = 1;
+				/*
+				* In that case you may use a value like VK_IMAGE_USAGE_TRANSFER_DST_BIT instead and 
+					use a memory operation to transfer the rendered image to a swap chain image.
+				*/
+				create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+
+				queue_family_indices indices = find_queue_families(pd);
+				unsigned q_fam_indices[] = { indices.graphics_family.value(), indices.present_family.value() };
+
+				if (indices.graphics_family != indices.present_family)
+				{
+					create_info.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
+					create_info.queueFamilyIndexCount = 2;
+					create_info.pQueueFamilyIndices = q_fam_indices;
+				}
+				else
+				{
+					create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+					create_info.queueFamilyIndexCount = 0;
+					create_info.pQueueFamilyIndices = nullptr;
+				}
+
+				/*
+				* We can specify that a certain transform should be applied to images in the swap chain if it is 
+				supported (supportedTransforms in capabilities), like a 90 degree clockwise rotation or horizontal flip. 
+				To specify that you do not want any transformation, simply specify the current transformation.
+				*/
+				create_info.preTransform = support.capabilities.currentTransform;
+				create_info.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+
+				create_info.presentMode = present_mode;
+				create_info.clipped = VK_TRUE;
+
+				create_info.oldSwapchain = VK_NULL_HANDLE;
+
+				if (!OP_SUCCESS(vkCreateSwapchainKHR(dev, &create_info, nullptr, &swap_chain)))
+				{
+					throw std::runtime_error("Failed to create swap chain!");
+				}
+			}
+		}
 
 		void create_instance()
 		{
@@ -298,50 +485,6 @@ namespace sandbox
 			}
 		}
 
-		queue_family_indices find_queue_families(VkPhysicalDevice dev)
-		{
-			queue_family_indices indices;
-
-			unsigned fam_count = 0;
-			vkGetPhysicalDeviceQueueFamilyProperties2(dev, &fam_count, nullptr);
-
-			std::vector<VkQueueFamilyProperties2> queue_fams(fam_count);
-
-			for (auto& q : queue_fams)
-			{
-				q.sType = VK_STRUCTURE_TYPE_QUEUE_FAMILY_PROPERTIES_2;
-			}
-
-			vkGetPhysicalDeviceQueueFamilyProperties2(dev, &fam_count, queue_fams.data());
-
-			
-
-			// find at least one queue family that supports VK_QUEUE_GRAPHICS_BIT
-			int i = 0;
-			for (const auto& qf : queue_fams)
-			{
-				if (qf.queueFamilyProperties.queueFlags & VK_QUEUE_GRAPHICS_BIT)
-				{
-					indices.graphics_family = i;
-				}
-
-				VkBool32 present_support = false;
-				vkGetPhysicalDeviceSurfaceSupportKHR(dev, i, surface, &present_support);
-
-				if (present_support)
-					indices.present_family = i;
-				
-				
-				if (indices.is_complete())
-					break;
-
-				i++;
-			}
-
-			return indices;
-		}
-
-
 		bool check_dev_extension_support(VkPhysicalDevice dev)
 		{
 			unsigned ext_count = 0;
@@ -358,69 +501,6 @@ namespace sandbox
 			}
 
 			return required_exts.empty();
-		}
-
-		swap_chain_support query_sw_support(VkPhysicalDevice dev)
-		{
-			swap_chain_support details{};
-
-			vkGetPhysicalDeviceSurfaceCapabilitiesKHR(dev, surface, &details.capabilities);
-
-			unsigned fmt_count = 0;
-			vkGetPhysicalDeviceSurfaceFormatsKHR(dev, surface, &fmt_count, nullptr);
-
-			if (0 != fmt_count)
-			{
-				details.formats.resize(fmt_count);
-				vkGetPhysicalDeviceSurfaceFormatsKHR(dev, surface, &fmt_count, details.formats.data());
-			}
-
-			unsigned pm_count = 0;
-			vkGetPhysicalDeviceSurfacePresentModesKHR(dev, surface, &pm_count, nullptr);
-
-			if (0 != pm_count)
-			{
-				details.present_modes.resize(pm_count);
-				vkGetPhysicalDeviceSurfacePresentModesKHR(dev, surface, &pm_count, details.present_modes.data());
-			}
-
-			return details;
-		}
-
-		VkSurfaceFormatKHR choose_swap_surface_fmt(const std::vector<VkSurfaceFormatKHR>& available_fmts)
-		{
-			for (const auto& fmt : available_fmts)
-			{
-				if (VK_FORMAT_R8G8B8A8_SRGB == fmt.format &&
-					VK_COLOR_SPACE_SRGB_NONLINEAR_KHR == fmt.colorSpace)
-				{
-					return fmt;
-				}
-			}
-
-			return available_fmts[0];
-		}
-
-		VkPresentModeKHR choose_swap_present_mode(const std::vector<VkPresentModeKHR>& available_modes)
-		{
-			for (const auto& mode : available_modes)
-			{
-				if (VK_PRESENT_MODE_MAILBOX_KHR == mode) // triple buffering
-					return mode;
-			}
-
-			return VK_PRESENT_MODE_FIFO_KHR;
-		}
-
-		VkExtent2D choose_swap_extent(const VkSurfaceCapabilitiesKHR& capabilities)
-		{
-			if (std::numeric_limits<unsigned>::max() != capabilities.currentExtent.width)
-			{
-				return capabilities.currentExtent;
-			}
-
-			
-			
 		}
 
 		/*
@@ -450,7 +530,7 @@ namespace sandbox
 
 			if(extensions_supported)
 			{
-				swap_chain_support sw_support = query_sw_support(dev);
+				KHR::swap_chain_support sw_support = KHR::query_sw_support(dev);
 				sw_adequate = !sw_support.formats.empty() && !sw_support.present_modes.empty();
 			}
 
@@ -501,7 +581,7 @@ namespace sandbox
 			}
 		}
 
-		VkDevice create_logical_device()
+		void create_logical_device()
 		{
 			queue_family_indices indices = find_queue_families(pd);
 
@@ -557,7 +637,6 @@ namespace sandbox
 			devq_info.queueFamilyIndex = indices.present_family.value();
 			vkGetDeviceQueue2(dev, &devq_info, &present_queue);
 		}
-				
 	}
 
 	void sandbox_app::run()
@@ -575,6 +654,7 @@ namespace sandbox
 		vulkan::KHR::create_surface();
 		vulkan::pick_physical_device();
 		vulkan::create_logical_device();
+		vulkan::KHR::create_swap_chain();
 	}
 
 	void sandbox_app::app_loop()
@@ -587,6 +667,8 @@ namespace sandbox
 
 	void sandbox_app::cleanup()
 	{
+		vkDestroySwapchainKHR(vulkan::dev, vulkan::KHR::swap_chain, nullptr);
+
 		vkDestroyDevice(vulkan::dev, nullptr);
 
 		if (vulkan::debug::enable_validation_layers)
