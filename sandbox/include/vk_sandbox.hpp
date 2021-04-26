@@ -26,14 +26,5 @@ namespace sandbox
 		void initialize();
 		void app_loop();
 		void cleanup();
-
-		GLFWwindow*					window;
-		VkInstance					instance;
-		VkPhysicalDevice			phy_dev		{ VK_NULL_HANDLE };
-		VkDevice					dev;
-		VkSurfaceKHR				surface;
-
-		VkQueue						graphics_queue;
-		VkQueue						present_queue;
 	};
 }

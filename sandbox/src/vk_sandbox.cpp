@@ -17,19 +17,31 @@ namespace sandbox
 {
 	namespace glfw
 	{
-		GLFWwindow* glfw_initialization(const unsigned res_width, const unsigned res_height)
+		GLFWwindow* window;
+
+		void glfw_initialization(const unsigned res_width, const unsigned res_height)
 		{
 			glfwInit();
 
 			glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 			glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 
-			return glfwCreateWindow(res_width, res_height, "sandbox", nullptr, nullptr);
+			window = glfwCreateWindow(res_width, res_height, "sandbox", nullptr, nullptr);
 		}
 	}
 	
 	namespace vulkan
 	{
+		const std::vector<const char*> dev_extensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
+
+		VkInstance					instance;
+		VkPhysicalDevice			pd{ VK_NULL_HANDLE };
+		VkDevice					dev;
+		VkSurfaceKHR				surface;
+
+		VkQueue						graphics_queue;
+		VkQueue						present_queue;
+
 		namespace debug
 		{
 			const std::vector<const char*> validation_layers =
@@ -134,7 +146,7 @@ namespace sandbox
 				debug_info.pUserData = nullptr;
 			}
 
-			void setup_debug_messenger(VkInstance inst)
+			void setup_debug_messenger()
 			{
 				if (!enable_validation_layers)
 					return;
@@ -142,7 +154,7 @@ namespace sandbox
 				VkDebugUtilsMessengerCreateInfoEXT create_info;
 				populate_debug_msg_info(create_info);
 
-				if (!OP_SUCCESS(CreateDebugUtilsMessengerEXT(inst, &create_info, nullptr, &debug_messenger)))
+				if (!OP_SUCCESS(CreateDebugUtilsMessengerEXT(instance, &create_info, nullptr, &debug_messenger)))
 				{
 					throw std::runtime_error("Debug Messenger set up failed!");
 				}
@@ -155,18 +167,35 @@ namespace sandbox
 				See: https://vulkan-tutorial.com/en/Drawing_a_triangle/Presentation/Window_surface
 				For non-glfw create surface
 			*/
-			void create_surface(VkInstance inst, GLFWwindow* window, VkSurfaceKHR& surface)
+			void create_surface()
 			{
-				if (!OP_SUCCESS(glfwCreateWindowSurface(inst, window, nullptr, &surface)))
+				if (!OP_SUCCESS(glfwCreateWindowSurface(instance, glfw::window, nullptr, &surface)))
 				{
 					throw std::runtime_error("Failed to create  window surface!");
 				}
 			}
 		}
 
-		const std::vector<const char*> dev_extensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
+		struct queue_family_indices
+		{
+			std::optional<unsigned> graphics_family;
+			std::optional<unsigned> present_family;
 
-		void create_instance(VkInstance &inst)
+			bool is_complete()
+			{
+				return graphics_family.has_value() && present_family.has_value();
+			}
+		};
+
+		struct swap_chain_support
+		{
+			VkSurfaceCapabilitiesKHR			capabilities;
+			std::vector<VkSurfaceFormatKHR>		formats;
+			std::vector<VkPresentModeKHR>		present_modes;
+		};
+
+
+		void create_instance()
 		{
 			if (debug::enable_validation_layers && !debug::check_validation_layer_support())
 			{
@@ -185,7 +214,7 @@ namespace sandbox
 			create_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
 			create_info.pApplicationInfo = &app_info;
 			
-			auto get_req_exts = [&create_info]()
+			auto get_required_extensions = [&create_info]()
 			{
 				unsigned glfw_ext_count = 0;
 				const char** glfw_extensions = nullptr;
@@ -217,7 +246,7 @@ namespace sandbox
 				return extensions;
 			};
 
-			auto exts = get_req_exts();
+			auto exts = get_required_extensions();
 			create_info.enabledExtensionCount = static_cast<unsigned>(exts.size());
 			create_info.ppEnabledExtensionNames = exts.data();
 
@@ -243,7 +272,7 @@ namespace sandbox
 				create_info.pNext = nullptr;
 			}
 
-			if (!OP_SUCCESS(vkCreateInstance(&create_info, nullptr, &inst)))
+			if (!OP_SUCCESS(vkCreateInstance(&create_info, nullptr, &instance)))
 			{
 				throw std::runtime_error("Failed to create vulkan instance!");
 			}
@@ -269,25 +298,7 @@ namespace sandbox
 			}
 		}
 
-		struct queue_family_indices
-		{
-			std::optional<unsigned> graphics_family;
-			std::optional<unsigned> present_family;
-
-			bool is_complete()
-			{
-				return graphics_family.has_value() && present_family.has_value();
-			}
-		};
-
-		struct swap_chain_support
-		{
-			VkSurfaceCapabilitiesKHR			capabilities;
-			std::vector<VkSurfaceFormatKHR>	formats;
-			std::vector<VkPresentModeKHR>		present_modes;
-		};
-
-		queue_family_indices find_queue_families(VkPhysicalDevice dev, VkSurfaceKHR* surface = nullptr)
+		queue_family_indices find_queue_families(VkPhysicalDevice dev)
 		{
 			queue_family_indices indices;
 
@@ -314,14 +325,12 @@ namespace sandbox
 					indices.graphics_family = i;
 				}
 
-				if (surface)
-				{
-					VkBool32 present_support = false;
-					vkGetPhysicalDeviceSurfaceSupportKHR(dev, i, *surface, &present_support);
+				VkBool32 present_support = false;
+				vkGetPhysicalDeviceSurfaceSupportKHR(dev, i, surface, &present_support);
 
-					if (present_support)
-						indices.present_family = i;
-				}
+				if (present_support)
+					indices.present_family = i;
+				
 				
 				if (indices.is_complete())
 					break;
@@ -351,28 +360,28 @@ namespace sandbox
 			return required_exts.empty();
 		}
 
-		swap_chain_support query_sw_support(VkPhysicalDevice pd, VkSurfaceKHR surface)
+		swap_chain_support query_sw_support(VkPhysicalDevice dev)
 		{
 			swap_chain_support details{};
 
-			vkGetPhysicalDeviceSurfaceCapabilitiesKHR(pd, surface, &details.capabilities);
+			vkGetPhysicalDeviceSurfaceCapabilitiesKHR(dev, surface, &details.capabilities);
 
 			unsigned fmt_count = 0;
-			vkGetPhysicalDeviceSurfaceFormatsKHR(pd, surface, &fmt_count, nullptr);
+			vkGetPhysicalDeviceSurfaceFormatsKHR(dev, surface, &fmt_count, nullptr);
 
 			if (0 != fmt_count)
 			{
 				details.formats.resize(fmt_count);
-				vkGetPhysicalDeviceSurfaceFormatsKHR(pd, surface, &fmt_count, details.formats.data());
+				vkGetPhysicalDeviceSurfaceFormatsKHR(dev, surface, &fmt_count, details.formats.data());
 			}
 
 			unsigned pm_count = 0;
-			vkGetPhysicalDeviceSurfacePresentModesKHR(pd, surface, &pm_count, nullptr);
+			vkGetPhysicalDeviceSurfacePresentModesKHR(dev, surface, &pm_count, nullptr);
 
 			if (0 != pm_count)
 			{
 				details.present_modes.resize(pm_count);
-				vkGetPhysicalDeviceSurfacePresentModesKHR(pd, surface, &pm_count, details.present_modes.data());
+				vkGetPhysicalDeviceSurfacePresentModesKHR(dev, surface, &pm_count, details.present_modes.data());
 			}
 
 			return details;
@@ -423,7 +432,7 @@ namespace sandbox
 			See: https://vulkan-tutorial.com/en/Drawing_a_triangle/Setup/Physical_devices_and_queue_families
 			For device suitability test
 		*/
-		bool is_device_suitable(VkPhysicalDevice dev, VkSurfaceKHR surface)
+		bool is_device_suitable(VkPhysicalDevice dev)
 		{
 			VkPhysicalDeviceProperties2 dev_props{};
 			dev_props.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
@@ -433,7 +442,7 @@ namespace sandbox
 			vkGetPhysicalDeviceProperties2(dev, &dev_props);
 			vkGetPhysicalDeviceFeatures2(dev, &dev_feats);
 
-			queue_family_indices indices = find_queue_families(dev, &surface);
+			queue_family_indices indices = find_queue_families(dev);
 
 			bool extensions_supported = check_dev_extension_support(dev);
 
@@ -441,7 +450,7 @@ namespace sandbox
 
 			if(extensions_supported)
 			{
-				swap_chain_support sw_support = query_sw_support(dev, surface);
+				swap_chain_support sw_support = query_sw_support(dev);
 				sw_adequate = !sw_support.formats.empty() && !sw_support.present_modes.empty();
 			}
 
@@ -452,10 +461,10 @@ namespace sandbox
 					sw_adequate;
 		};
 
-		VkPhysicalDevice pick_physical_device(VkInstance inst, VkSurfaceKHR surface)
+		void pick_physical_device()
 		{
 			unsigned dev_count = 0;
-			vkEnumeratePhysicalDevices(inst, &dev_count, nullptr);
+			vkEnumeratePhysicalDevices(instance, &dev_count, nullptr);
 
 			if (0 == dev_count)
 			{
@@ -463,9 +472,7 @@ namespace sandbox
 			}
 
 			std::vector<VkPhysicalDevice> devices(dev_count);
-			vkEnumeratePhysicalDevices(inst, &dev_count, devices.data());
-
-			VkPhysicalDevice chosen_dev{ VK_NULL_HANDLE };
+			vkEnumeratePhysicalDevices(instance, &dev_count, devices.data());
 
 #ifdef _DEBUG
 			std::cout << "Available Devices" << std::endl;
@@ -480,26 +487,23 @@ namespace sandbox
 #endif
 			for (const auto& d : devices)
 			{
-				if (is_device_suitable(d, surface))
+				if (is_device_suitable(d))
 				{
-					chosen_dev = d;
+					pd = d;
 
 					break;
 				}
 			}
 
-			if (VK_NULL_HANDLE == chosen_dev)
+			if (VK_NULL_HANDLE == pd)
 			{
 				throw std::runtime_error("Failed to find a suitable GPU!");
 			}
-
-			return chosen_dev;
 		}
 
-		VkDevice create_logical_device(VkPhysicalDevice pd, VkDevice& dev, 
-			VkQueue& g_queue, VkQueue& p_queue, VkSurfaceKHR surface)
+		VkDevice create_logical_device()
 		{
-			queue_family_indices indices = find_queue_families(pd, &surface);
+			queue_family_indices indices = find_queue_families(pd);
 
 			std::vector<VkDeviceQueueCreateInfo> q_create_infos;
 			std::set<unsigned> unique_q_fams = { indices.graphics_family.value(), indices.present_family.value() };
@@ -548,10 +552,10 @@ namespace sandbox
 			devq_info.queueFamilyIndex = indices.graphics_family.value();
 			devq_info.queueIndex = 0;
 
-			vkGetDeviceQueue2(dev, &devq_info, &g_queue);
+			vkGetDeviceQueue2(dev, &devq_info, &graphics_queue);
 			
 			devq_info.queueFamilyIndex = indices.present_family.value();
-			vkGetDeviceQueue2(dev, &devq_info, &p_queue);
+			vkGetDeviceQueue2(dev, &devq_info, &present_queue);
 		}
 				
 	}
@@ -565,17 +569,17 @@ namespace sandbox
 
 	void sandbox_app::initialize()
 	{
-		window = glfw::glfw_initialization(RES_WIDTH, RES_HEIGHT);
-		vulkan::create_instance(instance);
-		vulkan::debug::setup_debug_messenger(instance);
-		vulkan::KHR::create_surface(instance, window, surface);
-		phy_dev = vulkan::pick_physical_device(instance, surface);
-		vulkan::create_logical_device(phy_dev, dev, graphics_queue, present_queue, surface);
+		glfw::glfw_initialization(RES_WIDTH, RES_HEIGHT);
+		vulkan::create_instance();
+		vulkan::debug::setup_debug_messenger();
+		vulkan::KHR::create_surface();
+		vulkan::pick_physical_device();
+		vulkan::create_logical_device();
 	}
 
 	void sandbox_app::app_loop()
 	{
-		while (!glfwWindowShouldClose(window))
+		while (!glfwWindowShouldClose(glfw::window))
 		{
 			glfwPollEvents();
 		}
@@ -583,20 +587,20 @@ namespace sandbox
 
 	void sandbox_app::cleanup()
 	{
-		vkDestroyDevice(dev, nullptr);
+		vkDestroyDevice(vulkan::dev, nullptr);
 
 		if (vulkan::debug::enable_validation_layers)
 		{
-			vulkan::debug::DestroyDebugUtilsMessengerEXT(instance, vulkan::debug::debug_messenger, nullptr);
+			vulkan::debug::DestroyDebugUtilsMessengerEXT(vulkan::instance, vulkan::debug::debug_messenger, nullptr);
 		}
 
-		vkDestroySurfaceKHR(instance, surface, nullptr);
+		vkDestroySurfaceKHR(vulkan::instance, vulkan::surface, nullptr);
 
-		vkDestroyInstance(instance, nullptr);
+		vkDestroyInstance(vulkan::instance, nullptr);
 
-		if (window)
+		if (glfw::window)
 		{
-			glfwDestroyWindow(window);
+			glfwDestroyWindow(glfw::window);
 		}
 
 		glfwTerminate();
