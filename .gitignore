@@ -1,2 +1,4 @@
 build/
-instsall/
+build/*
+install/
+x64/
