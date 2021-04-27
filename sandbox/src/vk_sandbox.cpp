@@ -29,6 +29,16 @@ namespace sandbox
 
 			window = glfwCreateWindow(res_width, res_height, "sandbox", nullptr, nullptr);
 		}
+
+		void destroy_resources()
+		{
+			if (window)
+			{
+				glfwDestroyWindow(window);
+			}
+
+			glfwTerminate();
+		}
 	}
 	
 	namespace vulkan
@@ -45,6 +55,9 @@ namespace sandbox
 
 		VkQueue							graphics_queue;
 		VkQueue							present_queue;
+
+		VkSemaphore						image_semaphore;
+		VkSemaphore						rp_semaphore;
 
 		VkPipeline						graphics_pipeline;
 
@@ -1325,6 +1338,83 @@ namespace sandbox
 				}
 			}
 		}
+
+		void create_semaphores()
+		{
+			VkSemaphoreCreateInfo sem_info{};
+			sem_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+
+			if (!OP_SUCCESS(vkCreateSemaphore(dev, &sem_info, nullptr, &image_semaphore)) ||
+				!OP_SUCCESS(vkCreateSemaphore(dev, &sem_info, nullptr, &rp_semaphore)))
+			{
+				throw std::runtime_error("Semaphores creation failed!");
+			}
+		}
+
+		void draw_frame()
+		{
+			/*
+			As mentioned before, the first thing we need to do in the drawFrame function is acquire an image from the swap chain. 
+			Recall that the swap chain is an extension feature, so we must use a function with the vk*KHR naming convention.
+
+			The first two parameters of vkAcquireNextImageKHR are the logical device and the swap chain from which we wish to acquire 
+			an image. The third parameter specifies a timeout in nanoseconds for an image to become available. Using the maximum value 
+			of a 64 bit unsigned integer disables the timeout.
+
+			The next two parameters specify synchronization objects that are to be signaled when the presentation engine is finished 
+			using the image. That's the point in time where we can start drawing to it. It is possible to specify a semaphore, fence 
+			or both.
+
+			The last parameter specifies a variable to output the index of the swap chain image that has become available. The index 
+			refers to the VkImage in our swapChainImages array. We're going to use that index to pick the right command buffer.
+			*/
+			unsigned image_index;
+			vkAcquireNextImageKHR(dev, KHR::swap_chain, std::numeric_limits<uint64_t>::max(), 
+				image_semaphore, VK_NULL_HANDLE, &image_index);
+
+		}
+
+		void destroy_resources()
+		{
+			vkDestroySemaphore(dev, image_semaphore, nullptr);
+			vkDestroySemaphore(dev, rp_semaphore, nullptr);
+
+			vkDestroyCommandPool(dev, cmd_pool, nullptr);
+
+			for (auto fb : sc_framebuffers)
+			{
+				vkDestroyFramebuffer(dev, fb, nullptr);
+			}
+
+			vkDestroyRenderPass(dev, render_pass, nullptr);
+
+			vkDestroyPipeline(dev, graphics_pipeline, nullptr);
+
+			vkDestroyPipelineLayout(dev, pipeline_layout, nullptr);
+
+			for (auto iv : sc_image_views)
+			{
+				vkDestroyImageView(dev, iv, nullptr);
+			}
+
+			vkDestroySwapchainKHR(dev, KHR::swap_chain, nullptr);
+
+			vkDestroyDevice(vulkan::dev, nullptr);
+
+			if (debug::enable_validation_layers)
+			{
+				debug::DestroyDebugUtilsMessengerEXT(vulkan::instance, vulkan::debug::debug_messenger, nullptr);
+			}
+
+			vkDestroySurfaceKHR(instance, surface, nullptr);
+
+			vkDestroyInstance(instance, nullptr);
+		}
+
+		void wait_for_device_completion()
+		{
+			vkDeviceWaitIdle(dev);
+		}
 	}
 
 	void app::run()
@@ -1349,6 +1439,7 @@ namespace sandbox
 		vulkan::create_framebuffers();
 		vulkan::create_cmd_pool();
 		vulkan::create_cmd_buffers();
+		vulkan::create_semaphores();
 	}
 
 	void app::app_loop()
@@ -1356,47 +1447,15 @@ namespace sandbox
 		while (!glfwWindowShouldClose(glfw::window))
 		{
 			glfwPollEvents();
+			vulkan::draw_frame();
 		}
+
+		vulkan::wait_for_device_completion();
 	}
 
 	void app::cleanup()
 	{
-		vkDestroyCommandPool(vulkan::dev, vulkan::cmd_pool, nullptr);
-
-		for (auto fb : vulkan::sc_framebuffers)
-		{
-			vkDestroyFramebuffer(vulkan::dev, fb, nullptr);
-		}
-
-		vkDestroyRenderPass(vulkan::dev, vulkan::render_pass, nullptr);
-
-		vkDestroyPipeline(vulkan::dev, vulkan::graphics_pipeline, nullptr);
-
-		vkDestroyPipelineLayout(vulkan::dev, vulkan::pipeline_layout, nullptr);
-
-		for (auto iv : vulkan::sc_image_views)
-		{
-			vkDestroyImageView(vulkan::dev, iv, nullptr);
-		}
-
-		vkDestroySwapchainKHR(vulkan::dev, vulkan::KHR::swap_chain, nullptr);
-
-		vkDestroyDevice(vulkan::dev, nullptr);
-
-		if (vulkan::debug::enable_validation_layers)
-		{
-			vulkan::debug::DestroyDebugUtilsMessengerEXT(vulkan::instance, vulkan::debug::debug_messenger, nullptr);
-		}
-
-		vkDestroySurfaceKHR(vulkan::instance, vulkan::surface, nullptr);
-
-		vkDestroyInstance(vulkan::instance, nullptr);
-
-		if (glfw::window)
-		{
-			glfwDestroyWindow(glfw::window);
-		}
-
-		glfwTerminate();
+		vulkan::destroy_resources();
+		glfw::destroy_resources();
 	}
 }
