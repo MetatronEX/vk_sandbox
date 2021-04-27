@@ -8,6 +8,8 @@ rem Default flag
 SET BUILD_TYPE=Debug
 SET FLAG=-D CMAKE_BUILD_TYPE=%BUILD_TYPE% -D CMAKE_INSTALL_PREFIX=%PROJ_PATH%\install
 
+call "compile_shader.bat"
+
 
 @REM check for the visual studio path
 for %%e in (Professional Enterprise) do (
@@ -35,7 +37,6 @@ cd %PROJ_PATH%\build
 REM conan install .. -s build_type=%BUILD_TYPE% -r virtuos
 REM IF NOT %ERRORLEVEL%==0  GOTO conan_error
 
-call compile_shader.bat
 
 cmake -G "Visual Studio 16 2019"  %FLAG% ..
 IF NOT %ERRORLEVEL%==0  GOTO cmake_error
