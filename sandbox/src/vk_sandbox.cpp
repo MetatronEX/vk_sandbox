@@ -35,24 +35,30 @@ namespace sandbox
 	{
 		const std::vector<const char*> dev_extensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
 
-		VkInstance					instance;
-		VkPhysicalDevice			pd{ VK_NULL_HANDLE };
-		VkDevice					dev;
-		VkSurfaceKHR				surface;
+		VkInstance						instance;
+		VkPhysicalDevice				pd{ VK_NULL_HANDLE };
+		VkDevice						dev;
+		VkSurfaceKHR					surface;
 
-		VkRenderPass				render_pass;
-		VkPipelineLayout			pipeline_layout;
+		VkRenderPass					render_pass;
+		VkPipelineLayout				pipeline_layout;
 
-		VkQueue						graphics_queue;
-		VkQueue						present_queue;
+		VkQueue							graphics_queue;
+		VkQueue							present_queue;
 
-		VkPipeline					graphics_pipeline;
+		VkPipeline						graphics_pipeline;
 
-		VkFormat					sc_img_fmt;
-		VkExtent2D					sc_extent;
+		VkFormat						sc_img_fmt;
+		VkExtent2D						sc_extent;
 
-		std::vector<VkImage>		sc_images;
-		std::vector<VkImageView>	sc_image_views;
+		VkCommandPool					cmd_pool;
+
+		std::vector<VkImage>			sc_images;
+		std::vector<VkImageView>		sc_image_views;
+
+		std::vector<VkFramebuffer>		sc_framebuffers;
+
+		std::vector<VkCommandBuffer>	cmd_buffers;
 
 		struct queue_family_indices
 		{
@@ -1149,6 +1155,176 @@ namespace sandbox
 			vkDestroyShaderModule(dev, frag_mod, nullptr);
 			vkDestroyShaderModule(dev, vert_mod, nullptr);
 		}
+
+		void create_framebuffers()
+		{
+			sc_framebuffers.resize(sc_image_views.size());
+
+			for (size_t i = 0; sc_image_views.size(); i++)
+			{
+				VkImageView attachments[] =
+				{
+					sc_image_views[i]
+				};
+
+				VkFramebufferCreateInfo fb_info{};
+				fb_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+				/*
+				We first need to specify with which renderPass the framebuffer needs to be compatible. You can only use a 
+				framebuffer with the render passes that it is compatible with, which roughly means that they use the same 
+				number and type of attachments.
+				*/
+				fb_info.renderPass = render_pass;
+				/*
+				The attachmentCount and pAttachments parameters specify the VkImageView objects that should be bound to the 
+				respective attachment descriptions in the render pass pAttachment array.
+				*/
+				fb_info.attachmentCount = 1;
+				fb_info.pAttachments = attachments;
+				fb_info.width = sc_extent.width;
+				fb_info.height = sc_extent.height;
+				fb_info.layers = 1;
+
+				if (!OP_SUCCESS(vkCreateFramebuffer(dev, &fb_info, nullptr, &sc_framebuffers[i])))
+				{
+					throw std::runtime_error("Failed to create framebuffer!");
+				}
+			}
+		}
+
+		void create_cmd_pool()
+		{
+			queue_family_indices qfi = find_queue_families(pd);
+
+			/*
+			Command buffers are executed by submitting them on one of the device queues, like the graphics and 
+			presentation queues we retrieved. Each command pool can only allocate command buffers that are 
+			submitted on a single type of queue. We're going to record commands for drawing, which is why we've 
+			chosen the graphics queue family.
+
+
+			There are two possible flags for command pools:
+
+				- VK_COMMAND_POOL_CREATE_TRANSIENT_BIT: Hint that command buffers are rerecorded with new commands 
+				very often (may change memory allocation behavior)
+				
+				- VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT: Allow command buffers to be rerecorded individually, 
+				without this flag they all have to be reset together
+
+			*/
+			VkCommandPoolCreateInfo pool_info{};
+			pool_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+			pool_info.queueFamilyIndex = qfi.graphics_family.value();
+			pool_info.flags = 0;
+
+			if (!OP_SUCCESS(vkCreateCommandPool(dev, &pool_info, nullptr, &cmd_pool)))
+			{
+				throw std::runtime_error("Failed to create command pool!");
+			}
+		}
+
+		void create_cmd_buffers()
+		{
+			cmd_buffers.resize(sc_framebuffers.size());
+
+			VkCommandBufferAllocateInfo alloc_info{};
+			alloc_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+			alloc_info.commandPool = cmd_pool;
+			/*
+			The level parameter specifies if the allocated command buffers are primary or secondary command buffers.
+
+				- VK_COMMAND_BUFFER_LEVEL_PRIMARY: Can be submitted to a queue for execution, but cannot be called from other command buffers.
+				- VK_COMMAND_BUFFER_LEVEL_SECONDARY: Cannot be submitted directly, but can be called from primary command buffers.
+			*/
+			alloc_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+			alloc_info.commandBufferCount = static_cast<unsigned>(cmd_buffers.size());
+
+			if (!OP_SUCCESS(vkAllocateCommandBuffers(dev,&alloc_info, cmd_buffers.data())))
+			{
+				throw std::runtime_error("Failed to allocate command buffers!");
+			}
+
+			// command buffer recording
+			for (size_t i = 0; i < cmd_buffers.size(); i++)
+			{
+				VkCommandBufferBeginInfo begin_info{};
+				begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+				/*
+				The flags parameter specifies how we're going to use the command buffer. The following values are available:
+
+					- VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT: The command buffer will be rerecorded right after executing it once.
+					- VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT: This is a secondary command buffer that will be entirely within a single render pass.
+					- VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT: The command buffer can be resubmitted while it is also already pending execution.
+				
+				None of these flags are applicable for us right now.
+				*/
+				begin_info.flags = 0;
+				/*
+				The pInheritanceInfo parameter is only relevant for secondary command buffers. It specifies which state to 
+				inherit from the calling primary command buffers.
+				*/
+				begin_info.pInheritanceInfo = nullptr;
+
+				if (!OP_SUCCESS(vkBeginCommandBuffer(cmd_buffers[i], &begin_info)))
+				{
+					throw std::runtime_error("Command buffer recording failed!");
+				}
+
+				/* Note: If the command buffer was already recorded once, then a call to vkBeginCommandBuffer will implicitly reset it. 
+				 It's not possible to append commands to a buffer at a later time. */
+
+				VkRenderPassBeginInfo rpi{};
+				rpi.sType = VK_STRUCTURE_TYPE_RENDER_PASS_ATTACHMENT_BEGIN_INFO;
+				/*
+				The first parameters are the render pass itself and the attachments to bind. We created a framebuffer for each swap chain 
+				image that specifies it as color attachment.
+				*/
+				rpi.renderPass = render_pass;
+				rpi.framebuffer = sc_framebuffers[i];
+				/*
+				* The next two parameters define the size of the render area. The render area defines where shader loads and stores will 
+				take place. The pixels outside this region will have undefined values. It should match the size of the attachments for 
+				best performance.
+				*/
+				rpi.renderArea.offset = { 0,0 };
+				rpi.renderArea.extent = sc_extent;
+				/*
+				The last two parameters define the clear values to use for VK_ATTACHMENT_LOAD_OP_CLEAR, which we used as load operation 
+				for the color attachment.
+				*/
+				VkClearValue clear_color = { 0.f,0.f,0.f,1.f };
+				rpi.clearValueCount = 1;
+				rpi.pClearValues = &clear_color;
+
+				VkSubpassBeginInfo spi{};
+				spi.sType = VK_STRUCTURE_TYPE_SUBPASS_BEGIN_INFO;
+				spi.contents = VK_SUBPASS_CONTENTS_INLINE;
+				
+				/*
+				The render pass can now begin. All of the functions that record commands can be recognized by their vkCmd prefix. 
+				They all return void, so there will be no error handling until we've finished recording.
+
+				The final parameter controls how the drawing commands within the render pass will be provided. It can have one of two values:
+
+					- VK_SUBPASS_CONTENTS_INLINE: The render pass commands will be embedded in the primary command buffer itself and no 
+					secondary command buffers will be executed.
+					
+					- VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS: The render pass commands will be executed from secondary command buffers.
+				*/
+				vkCmdBeginRenderPass2(cmd_buffers[i], &rpi, &spi);
+
+				vkCmdBindPipeline(cmd_buffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, graphics_pipeline);
+
+				vkCmdDraw(cmd_buffers[i], 3, 1, 0, 0);
+
+				vkCmdEndRenderPass(cmd_buffers[i]);
+
+				if (!OP_SUCCESS(vkEndCommandBuffer(cmd_buffers[i])))
+				{
+					throw std::runtime_error("Command buffer recording failed!");
+				}
+			}
+		}
 	}
 
 	void app::run()
@@ -1170,6 +1346,9 @@ namespace sandbox
 		vulkan::create_image_views();
 		vulkan::create_render_pass();
 		vulkan::create_graphics_pipeline();
+		vulkan::create_framebuffers();
+		vulkan::create_cmd_pool();
+		vulkan::create_cmd_buffers();
 	}
 
 	void app::app_loop()
@@ -1182,6 +1361,13 @@ namespace sandbox
 
 	void app::cleanup()
 	{
+		vkDestroyCommandPool(vulkan::dev, vulkan::cmd_pool, nullptr);
+
+		for (auto fb : vulkan::sc_framebuffers)
+		{
+			vkDestroyFramebuffer(vulkan::dev, fb, nullptr);
+		}
+
 		vkDestroyRenderPass(vulkan::dev, vulkan::render_pass, nullptr);
 
 		vkDestroyPipeline(vulkan::dev, vulkan::graphics_pipeline, nullptr);
