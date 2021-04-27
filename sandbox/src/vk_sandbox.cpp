@@ -42,6 +42,11 @@ namespace sandbox
 		VkQueue						graphics_queue;
 		VkQueue						present_queue;
 
+		VkFormat					sc_img_fmt;
+		VkExtent2D					sc_extent;
+
+		std::vector<VkImage>		sc_images;
+		std::vector<VkImageView>	sc_image_views;
 
 		struct queue_family_indices
 		{
@@ -291,7 +296,7 @@ namespace sandbox
 				}
 			}
 
-			swap_chain_support query_sw_support(VkPhysicalDevice dev)
+			swap_chain_support query_sc_support(VkPhysicalDevice dev)
 			{
 				KHR::swap_chain_support details{};
 
@@ -320,7 +325,7 @@ namespace sandbox
 
 			void create_swap_chain()
 			{
-				swap_chain_support support = query_sw_support(pd);
+				swap_chain_support support = query_sc_support(pd);
 
 				VkSurfaceFormatKHR surface_fmt = choose_swap_surface_fmt(support.formats);
 				VkPresentModeKHR present_mode = choose_swap_present_mode(support.present_modes);
@@ -379,6 +384,13 @@ namespace sandbox
 				{
 					throw std::runtime_error("Failed to create swap chain!");
 				}
+
+				vkGetSwapchainImagesKHR(dev, swap_chain, &image_count, nullptr);
+				sc_images.resize(image_count);
+				vkGetSwapchainImagesKHR(dev, swap_chain, &image_count, sc_images.data());
+
+				sc_img_fmt = surface_fmt.format;
+				sc_extent = extent;
 			}
 		}
 
@@ -391,7 +403,7 @@ namespace sandbox
 
 			VkApplicationInfo app_info{  };
 			app_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-			app_info.pApplicationName = sandbox_app::app_name;
+			app_info.pApplicationName = app::app_name;
 			app_info.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
 			app_info.pEngineName = "sandbox engine";
 			app_info.engineVersion = VK_MAKE_VERSION(1, 0, 0);
@@ -530,7 +542,7 @@ namespace sandbox
 
 			if(extensions_supported)
 			{
-				KHR::swap_chain_support sw_support = KHR::query_sw_support(dev);
+				KHR::swap_chain_support sw_support = KHR::query_sc_support(dev);
 				sw_adequate = !sw_support.formats.empty() && !sw_support.present_modes.empty();
 			}
 
@@ -637,16 +649,71 @@ namespace sandbox
 			devq_info.queueFamilyIndex = indices.present_family.value();
 			vkGetDeviceQueue2(dev, &devq_info, &present_queue);
 		}
+
+		void create_image_views()
+		{
+			sc_image_views.resize(sc_images.size());
+
+			for (size_t i = 0; i < sc_images.size(); i++)
+			{
+				VkImageViewCreateInfo create_info{};
+				create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+				create_info.image = sc_images[i];
+				/*
+				The viewType and format fields specify how the image data should be interpreted. 
+				The viewType parameter allows you to treat images as 1D textures, 2D textures, 
+				3D textures and cube maps.
+				*/
+				create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
+				create_info.format = sc_img_fmt;
+				/*
+				The components field allows you to swizzle the color channels around. For example, 
+				you can map all of the channels to the red channel for a monochrome texture. You can 
+				also map constant values of 0 and 1 to a channel.
+				*/
+				create_info.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+				create_info.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+				create_info.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+				create_info.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+				/*
+				The subresourceRange field describes what the image's purpose is and which part of 
+				the image should be accessed. 
+
+				If you were working on a stereographic 3D application, then you would create a swap 
+				chain with multiple layers. You could then create multiple image views for each image 
+				representing the views for the left and right eyes by accessing different layers.
+				*/
+				create_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+				create_info.subresourceRange.baseMipLevel = 0;
+				create_info.subresourceRange.levelCount = 1;
+				create_info.subresourceRange.baseArrayLayer = 0;
+				create_info.subresourceRange.layerCount = 1;
+
+				/*
+				* Unlike images, the image views were explicitly created by us, so we need to add a 
+				similar loop to destroy them again at the end of the program
+				*/
+				if (!OP_SUCCESS(vkCreateImageView(dev, &create_info, nullptr, &sc_image_views[i])))
+				{
+					throw std::runtime_error("Failed to createimage views!");
+				}
+				/*
+				* An image view is sufficient to start using an image as a texture, but it's not quite
+				ready to be used as a render target just yet. That requires one more step of indirection,
+				known as a framebuffer. 
+				*/
+			}
+		}
 	}
 
-	void sandbox_app::run()
+	void app::run()
 	{
 		initialize();
 		app_loop();
 		cleanup();
 	}
 
-	void sandbox_app::initialize()
+	void app::initialize()
 	{
 		glfw::glfw_initialization(RES_WIDTH, RES_HEIGHT);
 		vulkan::create_instance();
@@ -657,7 +724,7 @@ namespace sandbox
 		vulkan::KHR::create_swap_chain();
 	}
 
-	void sandbox_app::app_loop()
+	void app::app_loop()
 	{
 		while (!glfwWindowShouldClose(glfw::window))
 		{
@@ -665,8 +732,13 @@ namespace sandbox
 		}
 	}
 
-	void sandbox_app::cleanup()
+	void app::cleanup()
 	{
+		for (auto iv : vulkan::sc_image_views)
+		{
+			vkDestroyImageView(vulkan::dev, iv, nullptr);
+		}
+
 		vkDestroySwapchainKHR(vulkan::dev, vulkan::KHR::swap_chain, nullptr);
 
 		vkDestroyDevice(vulkan::dev, nullptr);
