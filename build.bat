@@ -35,6 +35,8 @@ cd %PROJ_PATH%\build
 REM conan install .. -s build_type=%BUILD_TYPE% -r virtuos
 REM IF NOT %ERRORLEVEL%==0  GOTO conan_error
 
+call compile_shader.bat
+
 cmake -G "Visual Studio 16 2019"  %FLAG% ..
 IF NOT %ERRORLEVEL%==0  GOTO cmake_error
 echo START: %time%
