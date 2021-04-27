@@ -34,7 +34,7 @@ cmake -G "Visual Studio 16 2019"  %FLAG% ..
 IF NOT %ERRORLEVEL%==0  GOTO cmake_error
 echo START: %time%
 set BUILD_PATH=.
-cmake --build %BUILD_PATH% --target install --config %BUILD_TYPE% --clean-first --parallel -j12
+REM cmake --build %BUILD_PATH% --target install --config %BUILD_TYPE% --clean-first --parallel -j12
 echo END: %time%
 GOTO :eof
 
