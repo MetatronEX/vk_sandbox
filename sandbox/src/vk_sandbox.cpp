@@ -43,6 +43,8 @@ namespace sandbox
 	
 	namespace vulkan
 	{
+		constexpr unsigned max_frames_in_flight = 2;
+
 		const std::vector<const char*> dev_extensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
 
 		VkInstance						instance;
@@ -56,9 +58,6 @@ namespace sandbox
 		VkQueue							graphics_queue;
 		VkQueue							present_queue;
 
-		VkSemaphore						image_semaphore;
-		VkSemaphore						rp_semaphore;
-
 		VkPipeline						graphics_pipeline;
 
 		VkFormat						sc_img_fmt;
@@ -66,12 +65,20 @@ namespace sandbox
 
 		VkCommandPool					cmd_pool;
 
+		size_t							curr_frame{ 0 };
+
 		std::vector<VkImage>			sc_images;
 		std::vector<VkImageView>		sc_image_views;
 
 		std::vector<VkFramebuffer>		sc_framebuffers;
 
 		std::vector<VkCommandBuffer>	cmd_buffers;
+
+		std::vector<VkSemaphore>		image_semaphores;
+		std::vector<VkSemaphore>		rp_semaphores;
+
+		std::vector<VkFence>			in_flight_fences;
+		std::vector<VkFence>			images_in_flight;
 
 		struct queue_family_indices
 		{
@@ -416,6 +423,82 @@ namespace sandbox
 
 				sc_img_fmt = surface_fmt.format;
 				sc_extent = extent;
+			}
+
+			void draw_frame()
+			{
+				vkWaitForFences(dev, 1, &in_flight_fences[curr_frame], VK_TRUE, std::numeric_limits<uint64_t>::max());
+				
+				/*
+				As mentioned before, the first thing we need to do in the drawFrame function is acquire an image from the swap chain.
+				Recall that the swap chain is an extension feature, so we must use a function with the vk*KHR naming convention.
+
+				The first two parameters of vkAcquireNextImageKHR are the logical device and the swap chain from which we wish to acquire
+				an image. The third parameter specifies a timeout in nanoseconds for an image to become available. Using the maximum value
+				of a 64 bit unsigned integer disables the timeout.
+
+				The next two parameters specify synchronization objects that are to be signaled when the presentation engine is finished
+				using the image. That's the point in time where we can start drawing to it. It is possible to specify a semaphore, fence
+				or both.
+
+				The last parameter specifies a variable to output the index of the swap chain image that has become available. The index
+				refers to the VkImage in our swapChainImages array. We're going to use that index to pick the right command buffer.
+				*/
+				unsigned image_index;
+
+				vkAcquireNextImageKHR(dev, KHR::swap_chain, std::numeric_limits<uint64_t>::max(),
+					image_semaphores[curr_frame], VK_NULL_HANDLE, &image_index);
+
+				// check if previous frame is using this image -> there is a fence to wait on it
+				if (VK_NULL_HANDLE != images_in_flight[image_index])
+				{
+					vkWaitForFences(dev, 1, &images_in_flight[image_index], VK_TRUE,
+						std::numeric_limits<uint64_t>::max());
+				}
+
+				// mark the image as now being in use by this frame
+				images_in_flight[image_index] = in_flight_fences[curr_frame];
+
+				VkSubmitInfo submit{};
+				submit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+
+				VkSemaphore wait_sems[] = { image_semaphores[curr_frame] };
+				VkPipelineStageFlags wait_stages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+				submit.waitSemaphoreCount = 1;
+				submit.pWaitSemaphores = wait_sems;
+				submit.pWaitDstStageMask = wait_stages;
+				submit.commandBufferCount = 1;
+				submit.pCommandBuffers = &cmd_buffers[image_index];
+
+				VkSemaphore sig_sems[] = { rp_semaphores[curr_frame] };
+				submit.signalSemaphoreCount = 1;
+				submit.pSignalSemaphores = sig_sems;
+
+				vkResetFences(dev, 1, &in_flight_fences[curr_frame]);
+
+				if (!OP_SUCCESS(vkQueueSubmit(graphics_queue, 1, &submit, in_flight_fences[curr_frame])))
+				{
+					throw std::runtime_error("Failed to submit draw command buffer!");
+				}
+
+				VkPresentInfoKHR present_info{};
+				present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+				/*
+				The first two parameters specify which semaphores to wait on before presentation can happen, just like VkSubmitInfo.
+				*/
+				present_info.waitSemaphoreCount = 1;
+				present_info.pWaitSemaphores = sig_sems;
+
+				VkSwapchainKHR swap_chains[] = { swap_chain };
+				present_info.swapchainCount = 1;
+				present_info.pSwapchains = swap_chains;
+				present_info.pImageIndices = &image_index;
+				present_info.pResults = nullptr;
+
+				vkQueuePresentKHR(present_queue, &present_info);
+				vkQueueWaitIdle(present_queue);
+
+				curr_frame = (curr_frame + 1) % max_frames_in_flight;
 			}
 		}
 
@@ -836,6 +919,41 @@ namespace sandbox
 			sp.pColorAttachments = &ca_ref;
 
 			/*
+			* There are two built-in dependencies that take care of the transition at the start of the
+			render pass and at the end of the render pass, but the former does not occur at the right time.
+			It assumes that the transition occurs at the start of the pipeline, but we haven't acquired the
+			image yet at that point! There are two ways to deal with this problem. We could change the waitStages
+			for the imageAvailableSemaphore to VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT to ensure that the render passes
+			don't begin until the image is available, or we can make the render pass wait for the
+			VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT stage.
+
+			The first two fields specify the indices of the dependency and the dependent subpass. The special value 
+			VK_SUBPASS_EXTERNAL refers to the implicit subpass before or after the render pass depending on whether 
+			it is specified in srcSubpass or dstSubpass.
+
+			The index 0 refers to our subpass, which is the first and only one. The dstSubpass must always be higher 
+			than srcSubpass to prevent cycles in the dependency graph (unless one of the subpasses is VK_SUBPASS_EXTERNAL).
+			*/
+			VkSubpassDependency2 spd{};
+			spd.sType = VK_STRUCTURE_TYPE_SUBPASS_DEPENDENCY_2;
+			spd.srcSubpass = VK_SUBPASS_EXTERNAL;
+			spd.dstSubpass = 0;
+			/*
+			* The next two fields specify the operations to wait on and the stages in which these operations occur. We need 
+			to wait for the swap chain to finish reading from the image before we can access it. This can be accomplished by 
+			waiting on the color attachment output stage itself.
+			*/
+			spd.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+			spd.srcAccessMask = 0;
+			/*
+			* The operations that should wait on this are in the color attachment stage and involve the writing of the color 
+			attachment. These settings will prevent the transition from happening until it's actually necessary (and allowed): 
+			when we want to start writing colors to it.
+			*/
+			spd.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+			spd.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
+			/*
 			The render pass object can then be created by filling in the VkRenderPassCreateInfo structure with an array of attachments 
 			and subpasses. The VkAttachmentReference objects reference attachments using the indices of this array.
 			*/
@@ -845,6 +963,8 @@ namespace sandbox
 			rp_info.pAttachments = &color_attachment;
 			rp_info.subpassCount = 1;
 			rp_info.pSubpasses = &sp;
+			rp_info.dependencyCount = 1;
+			rp_info.pDependencies = &spd;
 
 			if (!OP_SUCCESS(vkCreateRenderPass2(dev, &rp_info, nullptr, &render_pass)))
 			{
@@ -1339,46 +1459,41 @@ namespace sandbox
 			}
 		}
 
-		void create_semaphores()
+		void create_syncs()
 		{
+			image_semaphores.resize(max_frames_in_flight);
+			rp_semaphores.resize(max_frames_in_flight);
+			in_flight_fences.resize(max_frames_in_flight);
+			images_in_flight.resize(sc_images.size(), VK_NULL_HANDLE);
+
 			VkSemaphoreCreateInfo sem_info{};
 			sem_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 
-			if (!OP_SUCCESS(vkCreateSemaphore(dev, &sem_info, nullptr, &image_semaphore)) ||
-				!OP_SUCCESS(vkCreateSemaphore(dev, &sem_info, nullptr, &rp_semaphore)))
+			VkFenceCreateInfo fence_info{};
+			fence_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+			fence_info.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+
+			for (size_t i = 0; i < max_frames_in_flight; i++)
 			{
-				throw std::runtime_error("Semaphores creation failed!");
+				if (!OP_SUCCESS(vkCreateSemaphore(dev, &sem_info, nullptr, &image_semaphores[i])) ||
+					!OP_SUCCESS(vkCreateSemaphore(dev, &sem_info, nullptr, &rp_semaphores[i])) ||
+					!OP_SUCCESS(vkCreateFence(dev, &fence_info, nullptr, &in_flight_fences[i])))
+				{
+					throw std::runtime_error("Sync objects creation failed!");
+				}
 			}
+			
 		}
-
-		void draw_frame()
-		{
-			/*
-			As mentioned before, the first thing we need to do in the drawFrame function is acquire an image from the swap chain. 
-			Recall that the swap chain is an extension feature, so we must use a function with the vk*KHR naming convention.
-
-			The first two parameters of vkAcquireNextImageKHR are the logical device and the swap chain from which we wish to acquire 
-			an image. The third parameter specifies a timeout in nanoseconds for an image to become available. Using the maximum value 
-			of a 64 bit unsigned integer disables the timeout.
-
-			The next two parameters specify synchronization objects that are to be signaled when the presentation engine is finished 
-			using the image. That's the point in time where we can start drawing to it. It is possible to specify a semaphore, fence 
-			or both.
-
-			The last parameter specifies a variable to output the index of the swap chain image that has become available. The index 
-			refers to the VkImage in our swapChainImages array. We're going to use that index to pick the right command buffer.
-			*/
-			unsigned image_index;
-			vkAcquireNextImageKHR(dev, KHR::swap_chain, std::numeric_limits<uint64_t>::max(), 
-				image_semaphore, VK_NULL_HANDLE, &image_index);
-
-		}
-
+		
 		void destroy_resources()
 		{
-			vkDestroySemaphore(dev, image_semaphore, nullptr);
-			vkDestroySemaphore(dev, rp_semaphore, nullptr);
-
+			for (size_t i = 0; i < vulkan::max_frames_in_flight; i++)
+			{
+				vkDestroySemaphore(dev, image_semaphores[i], nullptr);
+				vkDestroySemaphore(dev, rp_semaphores[i], nullptr);
+				vkDestroyFence(dev, in_flight_fences[i], nullptr);
+			}
+			
 			vkDestroyCommandPool(dev, cmd_pool, nullptr);
 
 			for (auto fb : sc_framebuffers)
@@ -1439,7 +1554,7 @@ namespace sandbox
 		vulkan::create_framebuffers();
 		vulkan::create_cmd_pool();
 		vulkan::create_cmd_buffers();
-		vulkan::create_semaphores();
+		vulkan::create_syncs();
 	}
 
 	void app::app_loop()
@@ -1447,7 +1562,7 @@ namespace sandbox
 		while (!glfwWindowShouldClose(glfw::window))
 		{
 			glfwPollEvents();
-			vulkan::draw_frame();
+			vulkan::KHR::draw_frame();
 		}
 
 		vulkan::wait_for_device_completion();
