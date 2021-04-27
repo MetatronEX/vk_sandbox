@@ -704,6 +704,15 @@ namespace sandbox
 				*/
 			}
 		}
+
+		/*
+		See: https://vulkan-tutorial.com/en/Drawing_a_triangle/Graphics_pipeline_basics/Introduction
+		Important read.
+		*/
+		void create_graphics_pipeline()
+		{
+
+		}
 	}
 
 	void app::run()
@@ -722,6 +731,7 @@ namespace sandbox
 		vulkan::pick_physical_device();
 		vulkan::create_logical_device();
 		vulkan::KHR::create_swap_chain();
+		vulkan::create_image_views();
 	}
 
 	void app::app_loop()
