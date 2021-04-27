@@ -1160,7 +1160,7 @@ namespace sandbox
 		{
 			sc_framebuffers.resize(sc_image_views.size());
 
-			for (size_t i = 0; sc_image_views.size(); i++)
+			for (size_t i = 0; i < sc_image_views.size(); i++)
 			{
 				VkImageView attachments[] =
 				{
@@ -1274,7 +1274,7 @@ namespace sandbox
 				 It's not possible to append commands to a buffer at a later time. */
 
 				VkRenderPassBeginInfo rpi{};
-				rpi.sType = VK_STRUCTURE_TYPE_RENDER_PASS_ATTACHMENT_BEGIN_INFO;
+				rpi.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
 				/*
 				The first parameters are the render pass itself and the attachments to bind. We created a framebuffer for each swap chain 
 				image that specifies it as color attachment.
