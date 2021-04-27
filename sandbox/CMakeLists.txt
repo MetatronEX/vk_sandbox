@@ -11,9 +11,13 @@ file(GLOB_RECURSE SOURCES
   src/*.cpp   
 ) 
 
+file(GLOB_RECURSE SHADERS
+	shader/*.spv
+)
+
 # generate visual studio project filters
 if (MSVC)
-foreach(_source IN ITEMS ${HEADERS} ${SOURCES})
+foreach(_source IN ITEMS ${HEADERS} ${SOURCES} ${SHADERS})
     get_filename_component(_source_path "${_source}" PATH)
     string(REPLACE "${CMAKE_SOURCE_DIR}" "" _group_path "${_source_path}")
     string(REPLACE "/" "\\" _group_path "${_group_path}")
@@ -21,7 +25,7 @@ foreach(_source IN ITEMS ${HEADERS} ${SOURCES})
 endforeach()
 endif()
 
-add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})
+add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS} ${SHADERS})
 
 target_compile_options(${PROJECT_NAME} PRIVATE
   $<$<CXX_COMPILER_ID:MSVC>:/W3>
