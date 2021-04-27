@@ -2,7 +2,7 @@
 
 auto main() -> int
 {
-	sandbox::sandbox_app app;
+	sandbox::app app;
 
 	try
 	{

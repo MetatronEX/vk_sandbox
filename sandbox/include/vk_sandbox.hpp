@@ -10,7 +10,7 @@
 
 namespace sandbox
 {
-	class sandbox_app
+	class app
 	{
 	public:
 
