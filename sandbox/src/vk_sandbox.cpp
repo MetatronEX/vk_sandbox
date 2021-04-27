@@ -46,6 +46,8 @@ namespace sandbox
 		VkQueue						graphics_queue;
 		VkQueue						present_queue;
 
+		VkPipeline					graphics_pipeline;
+
 		VkFormat					sc_img_fmt;
 		VkExtent2D					sc_extent;
 
@@ -819,7 +821,7 @@ namespace sandbox
 			and subpasses. The VkAttachmentReference objects reference attachments using the indices of this array.
 			*/
 			VkRenderPassCreateInfo2 rp_info{};
-			rp_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+			rp_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO_2;
 			rp_info.attachmentCount = 1;
 			rp_info.pAttachments = &color_attachment;
 			rp_info.subpassCount = 1;
@@ -834,6 +836,7 @@ namespace sandbox
 		/*
 		See: https://vulkan-tutorial.com/en/Drawing_a_triangle/Graphics_pipeline_basics/Introduction
 		Important read.
+		And this: https://vulkan-tutorial.com/en/Drawing_a_triangle/Graphics_pipeline_basics/Conclusion
 		*/
 		void create_graphics_pipeline()
 		{
@@ -1104,6 +1107,44 @@ namespace sandbox
 				throw std::runtime_error("Failed to create pipeline layout!");
 			}
 
+			VkGraphicsPipelineCreateInfo pl_info{};
+			pl_info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+			// shader stages
+			pl_info.stageCount = 2;
+			pl_info.pStages = stages;
+			// fixed functions
+			pl_info.pVertexInputState = &vtx_input_info;
+			pl_info.pInputAssemblyState = &ia_info;
+			pl_info.pViewportState = &vp_state;
+			pl_info.pRasterizationState = &raster_info;
+			pl_info.pMultisampleState = &ms_info;
+			pl_info.pDepthStencilState = nullptr;
+			pl_info.pColorBlendState = &color_blend;
+			pl_info.pDynamicState = nullptr;
+			// pipeline layout
+			pl_info.layout = pipeline_layout;
+			// render pass
+			pl_info.renderPass = render_pass;
+			pl_info.subpass = 0;
+			/*
+			Vulkan allows you to create a new graphics pipeline by deriving from an existing pipeline. The idea 
+			of pipeline derivatives is that it is less expensive to set up pipelines when they have much functionality 
+			in common with an existing pipeline and switching between pipelines from the same parent can 
+			also be done quicker. 
+
+			You can either specify the handle of an existing pipeline with basePipelineHandle or reference another 
+			pipeline that is about to be created by index with basePipelineIndex.
+
+			These values are only used if the VK_PIPELINE_CREATE_DERIVATIVE_BIT flag is also specified in the flags field 
+			of VkGraphicsPipelineCreateInfo.
+			*/
+			pl_info.basePipelineHandle = VK_NULL_HANDLE;
+			pl_info.basePipelineIndex = 0;
+
+			if (!OP_SUCCESS(vkCreateGraphicsPipelines(dev, VK_NULL_HANDLE, 1, &pl_info, nullptr, &graphics_pipeline)))
+			{
+				throw std::runtime_error("Failed to create graphics pipeline!");
+			}
 
 			vkDestroyShaderModule(dev, frag_mod, nullptr);
 			vkDestroyShaderModule(dev, vert_mod, nullptr);
@@ -1142,6 +1183,8 @@ namespace sandbox
 	void app::cleanup()
 	{
 		vkDestroyRenderPass(vulkan::dev, vulkan::render_pass, nullptr);
+
+		vkDestroyPipeline(vulkan::dev, vulkan::graphics_pipeline, nullptr);
 
 		vkDestroyPipelineLayout(vulkan::dev, vulkan::pipeline_layout, nullptr);
 

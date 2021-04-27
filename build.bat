@@ -21,17 +21,9 @@ for %%e in (Professional Enterprise) do (
 IF NOT EXIST "%MSVC_ENV_SETUP%" GOTO MSBuild_error
 call "%MSVC_ENV_SETUP%"
 
-rem msbuild %PROJ_PATH%\External\ReflectionLib\ReflectionLib.sln /p:Configuration=%BUILD_TYPE% 
-
-rem call "%PROJ_PATH%\MeshNetStandaloneTool\MeshNetCMake\buildMeshNet.bat" -ninja -d
-
 @REM force re-creation of build folder
 IF EXIST %PROJ_PATH%\build RMDIR /Q /S %PROJ_PATH%\build
 mkdir %PROJ_PATH%\build
-
-@REM force re-creation of install folder
-IF EXIST %PROJ_PATH%\install RMDIR /Q /S %PROJ_PATH%\install
-mkdir %PROJ_PATH%\install
 
 cd %PROJ_PATH%\build
 REM conan install .. -s build_type=%BUILD_TYPE% -r virtuos
@@ -42,7 +34,7 @@ cmake -G "Visual Studio 16 2019"  %FLAG% ..
 IF NOT %ERRORLEVEL%==0  GOTO cmake_error
 echo START: %time%
 set BUILD_PATH=.
-rem cmake --build %BUILD_PATH% --target install --config %BUILD_TYPE% --clean-first --parallel -j12
+cmake --build %BUILD_PATH% --target install --config %BUILD_TYPE% --clean-first --parallel -j12
 echo END: %time%
 GOTO :eof
 
