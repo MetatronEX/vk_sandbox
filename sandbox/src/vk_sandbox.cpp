@@ -1,8 +1,6 @@
 #include "vk_sandbox.hpp"
 
-#define GLM_FORCE_RADIANS
-#define GLM_FORCE_DEPTH_ZERO_TO_ONE
-#include <glm.hpp>
+
 
 #include <memory>
 #include <set>
@@ -67,9 +65,9 @@ namespace sandbox
 
 		struct UniformBufferObject
 		{
-			glm::mat4 model;
-			glm::mat4 view;
-			glm::mat4 proj;
+			alignas(16) glm::mat4 model;
+			alignas(16) glm::mat4 view;
+			alignas(16) glm::mat4 proj;
 		};
 
 		VkInstance						instance;

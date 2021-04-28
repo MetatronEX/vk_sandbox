@@ -4,8 +4,11 @@
 #define GLFW_EXPOSE_NATIVE_WIN32
 #include <GLFW/glfw3native.h>
 
+#define GLM_FORCE_RADIANS
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
+
 #include <glm.hpp>
-#include <../glm/gtc/matrix_transform.hpp> // cmake bug to fix
+#include <gtc/matrix_transform.hpp>
 
 #include <chrono>
 #include <stdexcept>
