@@ -52,6 +52,13 @@ namespace sandbox
 
 		const std::vector<const char*> dev_extensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
 
+		const std::vector<vertex> vertices =
+		{
+			{{0.f,-.5f},{1.f,0.f,0.f}},
+			{{.5f, .5f},{0.f,1.f,0.f}},
+			{{-.5f,.5f},{0.f,0.f,1.f}}
+		};
+
 		VkInstance						instance;
 		VkPhysicalDevice				pd{ VK_NULL_HANDLE };
 		VkDevice						dev;
@@ -69,6 +76,8 @@ namespace sandbox
 		VkExtent2D						sc_extent;
 
 		VkCommandPool					cmd_pool;
+
+		VkBuffer						vertex_buffer;
 
 		size_t							curr_frame{ 0 };
 
@@ -1110,12 +1119,15 @@ namespace sandbox
 			VkPipelineShaderStageCreateInfo stages[] = { vert_ssinfo, frag_ssinfo };
 
 			// vertex input stuff
+			auto binding_description = vertex::get_binding_desc();
+			auto attr_descriptions = vertex::get_attr_desc();
+
 			VkPipelineVertexInputStateCreateInfo vtx_input_info{};
 			vtx_input_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-			vtx_input_info.vertexBindingDescriptionCount = 0;
-			vtx_input_info.pVertexBindingDescriptions = nullptr;
-			vtx_input_info.vertexAttributeDescriptionCount = 0;
-			vtx_input_info.pVertexAttributeDescriptions = nullptr;
+			vtx_input_info.vertexBindingDescriptionCount = 1;
+			vtx_input_info.pVertexBindingDescriptions = &binding_description;
+			vtx_input_info.vertexAttributeDescriptionCount = static_cast<uint32_t>(attr_descriptions.size());
+			vtx_input_info.pVertexAttributeDescriptions = attr_descriptions.data();
 
 			// input assembly stuff
 			VkPipelineInputAssemblyStateCreateInfo ia_info{};
@@ -1432,6 +1444,82 @@ namespace sandbox
 			}
 		}
 
+		void create_vertex_buffer()
+		{
+			VkBufferCreateInfo b_info{};
+			b_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+			b_info.size = sizeof(vertex) * vertices.size();
+			/*
+			* usage indicates which purpose the data in the buffer is going to be used. 
+			It is possible to specify multiple purposes using a bitwise or.
+			*/
+			b_info.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+			/*
+			* Just like the images in the swap chain, buffers can also be owned by a specific 
+			queue family or be shared between multiple at the same time. The buffer will only 
+			be used from the graphics queue, so we can stick to exclusive access.
+
+			The flags parameter is used to configure sparse buffer memory, which is not relevant 
+			right now. We'll leave it at the default value of 0.
+			*/
+			b_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+			b_info.flags = 0;
+
+			if (!OP_SUCCESS(vkCreateBuffer(dev, &b_info, nullptr, &vertex_buffer)))
+			{
+				throw std::runtime_error("Vertex buffer creation failed!");
+			}
+
+			/*
+			* The buffer has been created, but it doesn't actually have any memory assigned to it yet. 
+			The first step of allocating memory for the buffer is to query its memory requirements 
+			using the aptly named vkGetBufferMemoryRequirements function.
+
+			The VkMemoryRequirements struct has three fields:
+
+				- size: The size of the required amount of memory in bytes, may differ from bufferInfo.size.
+
+				- alignment: The offset in bytes where the buffer begins in the allocated region of memory, 
+				depends on bufferInfo.usage and bufferInfo.flags.
+
+				- memoryTypeBits: Bit field of the memory types that are suitable for the buffer.
+			*/
+			VkMemoryRequirements2 mem_req{};
+			mem_req.sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2;
+
+			VkBufferMemoryRequirementsInfo2 bmr_info{};
+			bmr_info.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_REQUIREMENTS_INFO_2;
+			bmr_info.buffer = vertex_buffer;
+			
+			vkGetBufferMemoryRequirements2(dev, &bmr_info, &mem_req);
+		}
+
+		/*
+		* Graphics cards can offer different types of memory to allocate from. Each type of memory varies in 
+		terms of allowed operations and performance characteristics. We need to combine the requirements of 
+		the buffer and our own application requirements to find the right type of memory to use.
+		*/
+		uint32_t find_memory_type(uint32_t type_filter, VkMemoryPropertyFlags props)
+		{
+			VkPhysicalDeviceMemoryProperties2 mem_props{};
+			mem_props.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PROPERTIES_2;
+
+			vkGetPhysicalDeviceMemoryProperties2(pd, &mem_props);
+
+			/*
+			* The VkPhysicalDeviceMemoryProperties structure has two arrays memoryTypes and memoryHeaps. 
+			Memory heaps are distinct memory resources like dedicated VRAM and swap space in RAM for when VRAM 
+			runs out. The different types of memory exist within these heaps.
+			*/
+			for (uint32_t i = 0; i < mem_props.memoryProperties.memoryTypeCount; i++)
+			{
+				if (type_filter & (1 << i))
+					return i;
+			}
+
+			throw std::runtime_error("Suitable memory type not found!");
+		}
+
 		void create_cmd_buffers()
 		{
 			cmd_buffers.resize(sc_framebuffers.size());
@@ -1576,6 +1664,9 @@ namespace sandbox
 			}
 
 			KHR::clean_swap_chain();
+
+			vkDestroyBuffer(dev, vertex_buffer, nullptr);
+
 			vkDestroyCommandPool(dev, cmd_pool, nullptr);
 			vkDestroyDevice(dev, nullptr);
 
