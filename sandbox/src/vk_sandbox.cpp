@@ -5,10 +5,8 @@
 #include <glm.hpp>
 
 #include <memory>
-#include <vector>
 #include <set>
 #include <cstring>
-#include <optional>
 #include <algorithm> 
 #include <fstream>
 
@@ -20,6 +18,11 @@ namespace sandbox
 	{
 		GLFWwindow* window;
 
+		void framebuffer_resize_callback(GLFWwindow* win, int w, int h) 
+		{
+			vulkan::fb_resized = true;
+		}
+
 		void glfw_initialization(const unsigned res_width, const unsigned res_height)
 		{
 			glfwInit();
@@ -28,6 +31,8 @@ namespace sandbox
 			glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 
 			window = glfwCreateWindow(res_width, res_height, "sandbox", nullptr, nullptr);
+			
+			glfwSetFramebufferSizeCallback(window, framebuffer_resize_callback);
 		}
 
 		void destroy_resources()
@@ -80,59 +85,7 @@ namespace sandbox
 		std::vector<VkFence>			in_flight_fences;
 		std::vector<VkFence>			images_in_flight;
 
-		struct queue_family_indices
-		{
-			std::optional<unsigned> graphics_family;
-			std::optional<unsigned> present_family;
-
-			bool is_complete()
-			{
-				return graphics_family.has_value() && present_family.has_value();
-			}
-		};
-
-		queue_family_indices find_queue_families(VkPhysicalDevice dev)
-		{
-			queue_family_indices indices;
-
-			unsigned fam_count = 0;
-			vkGetPhysicalDeviceQueueFamilyProperties2(dev, &fam_count, nullptr);
-
-			std::vector<VkQueueFamilyProperties2> queue_fams(fam_count);
-
-			for (auto& q : queue_fams)
-			{
-				q.sType = VK_STRUCTURE_TYPE_QUEUE_FAMILY_PROPERTIES_2;
-			}
-
-			vkGetPhysicalDeviceQueueFamilyProperties2(dev, &fam_count, queue_fams.data());
-
-
-
-			// find at least one queue family that supports VK_QUEUE_GRAPHICS_BIT
-			int i = 0;
-			for (const auto& qf : queue_fams)
-			{
-				if (qf.queueFamilyProperties.queueFlags & VK_QUEUE_GRAPHICS_BIT)
-				{
-					indices.graphics_family = i;
-				}
-
-				VkBool32 present_support = false;
-				vkGetPhysicalDeviceSurfaceSupportKHR(dev, i, surface, &present_support);
-
-				if (present_support)
-					indices.present_family = i;
-
-
-				if (indices.is_complete())
-					break;
-
-				i++;
-			}
-
-			return indices;
-		}
+		bool							fb_resized{ false };
 
 		namespace debug
 		{
@@ -257,13 +210,6 @@ namespace sandbox
 		{
 			VkSwapchainKHR swap_chain;
 
-			struct swap_chain_support
-			{
-				VkSurfaceCapabilitiesKHR			capabilities;
-				std::vector<VkSurfaceFormatKHR>		formats;
-				std::vector<VkPresentModeKHR>		present_modes;
-			};
-
 			/*
 				See: https://vulkan-tutorial.com/en/Drawing_a_triangle/Presentation/Window_surface
 				For non-glfw create surface
@@ -330,7 +276,7 @@ namespace sandbox
 
 			swap_chain_support query_sc_support(VkPhysicalDevice dev)
 			{
-				KHR::swap_chain_support details{};
+				swap_chain_support details{};
 
 				vkGetPhysicalDeviceSurfaceCapabilitiesKHR(dev, surface, &details.capabilities);
 
@@ -367,7 +313,7 @@ namespace sandbox
 
 				if (support.capabilities.maxImageCount > 0 && image_count > support.capabilities.maxImageCount)
 					image_count = support.capabilities.maxImageCount;
-				
+
 				VkSwapchainCreateInfoKHR create_info{};
 				create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
 				create_info.surface = surface;
@@ -378,7 +324,7 @@ namespace sandbox
 				create_info.imageExtent = extent;
 				create_info.imageArrayLayers = 1;
 				/*
-				* In that case you may use a value like VK_IMAGE_USAGE_TRANSFER_DST_BIT instead and 
+				* In that case you may use a value like VK_IMAGE_USAGE_TRANSFER_DST_BIT instead and
 					use a memory operation to transfer the rendered image to a swap chain image.
 				*/
 				create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
@@ -400,8 +346,8 @@ namespace sandbox
 				}
 
 				/*
-				* We can specify that a certain transform should be applied to images in the swap chain if it is 
-				supported (supportedTransforms in capabilities), like a 90 degree clockwise rotation or horizontal flip. 
+				* We can specify that a certain transform should be applied to images in the swap chain if it is
+				supported (supportedTransforms in capabilities), like a 90 degree clockwise rotation or horizontal flip.
 				To specify that you do not want any transformation, simply specify the current transformation.
 				*/
 				create_info.preTransform = support.capabilities.currentTransform;
@@ -425,12 +371,64 @@ namespace sandbox
 				sc_extent = extent;
 			}
 
+			/*
+			* We could recreate the command pool from scratch, but that is rather wasteful.
+			Instead I've opted to clean up the existing command buffers with the vkFreeCommandBuffers
+			function. This way we can reuse the existing pool to allocate the new command buffers.
+			*/
+			void clean_swap_chain()
+			{
+				for (auto fb : sc_framebuffers)
+				{
+					vkDestroyFramebuffer(dev, fb, nullptr);
+				}
+
+				vkFreeCommandBuffers(dev, cmd_pool, static_cast<uint32_t>(cmd_buffers.size()), cmd_buffers.data());
+
+				vkDestroyRenderPass(dev, render_pass, nullptr);
+
+				vkDestroyPipeline(dev, graphics_pipeline, nullptr);
+
+				vkDestroyPipelineLayout(dev, pipeline_layout, nullptr);
+
+				for (auto iv : sc_image_views)
+				{
+					vkDestroyImageView(dev, iv, nullptr);
+				}
+
+				vkDestroySwapchainKHR(dev, swap_chain, nullptr);
+			}
+
+			void recreate_swap_chain()
+			{
+				int w = 0, h = 0;
+
+				glfwGetFramebufferSize(glfw::window, &w, &h);
+
+				while (0 == w || 0 == h)
+				{
+					glfwGetFramebufferSize(glfw::window, &w, &h);
+					glfwWaitEvents();
+				}
+
+				vkDeviceWaitIdle(dev);
+
+				clean_swap_chain();
+
+				create_swap_chain();
+				create_image_views();
+				create_render_pass();
+				create_graphics_pipeline();
+				create_framebuffers();
+				create_cmd_buffers();
+			}
+
 			void draw_frame()
 			{
 				vkWaitForFences(dev, 1, &in_flight_fences[curr_frame], VK_TRUE, std::numeric_limits<uint64_t>::max());
-				
+
 				/*
-				As mentioned before, the first thing we need to do in the drawFrame function is acquire an image from the swap chain.
+				The first thing we need to do in the drawFrame function is acquire an image from the swap chain.
 				Recall that the swap chain is an extension feature, so we must use a function with the vk*KHR naming convention.
 
 				The first two parameters of vkAcquireNextImageKHR are the logical device and the swap chain from which we wish to acquire
@@ -446,8 +444,32 @@ namespace sandbox
 				*/
 				unsigned image_index;
 
-				vkAcquireNextImageKHR(dev, KHR::swap_chain, std::numeric_limits<uint64_t>::max(),
+				auto result = vkAcquireNextImageKHR(dev, swap_chain, std::numeric_limits<uint64_t>::max(),
 					image_semaphores[curr_frame], VK_NULL_HANDLE, &image_index);
+
+				/*
+				* Need to figure out when swap chain recreation is necessary and call our new recreateSwapChain function.
+				Vulkan will usually just tell us that the swap chain is no longer adequate during presentation. The vkAcquireNextImageKHR
+				and vkQueuePresentKHR functions can return the following special values to indicate this.
+
+					- VK_ERROR_OUT_OF_DATE_KHR: The swap chain has become incompatible with the surface and can no longer be used for rendering.
+					Usually happens after a window resize.
+
+					- VK_SUBOPTIMAL_KHR: The swap chain can still be used to successfully present to the surface, but the surface properties are
+					no longer matched exactly.
+				*/
+				if (VK_ERROR_OUT_OF_DATE_KHR == result)
+				{
+					recreate_swap_chain();
+					return;
+				}
+				else
+				{
+					if (VK_SUCCESS != result && VK_SUBOPTIMAL_KHR == result)
+					{
+						throw std::runtime_error("Failed to acquire swap chain image!");
+					}
+				}
 
 				// check if previous frame is using this image -> there is a fence to wait on it
 				if (VK_NULL_HANDLE != images_in_flight[image_index])
@@ -495,7 +517,18 @@ namespace sandbox
 				present_info.pImageIndices = &image_index;
 				present_info.pResults = nullptr;
 
-				vkQueuePresentKHR(present_queue, &present_info);
+				result = vkQueuePresentKHR(present_queue, &present_info);
+
+				if (VK_ERROR_OUT_OF_DATE_KHR == result || VK_SUBOPTIMAL_KHR == result || fb_resized)
+				{
+					fb_resized = false;
+					recreate_swap_chain();
+				}
+				if (VK_SUCCESS != result)
+				{
+					std::runtime_error("Swap chain image acquisition failed!");
+				}
+
 				vkQueueWaitIdle(present_queue);
 
 				curr_frame = (curr_frame + 1) % max_frames_in_flight;
@@ -621,6 +654,49 @@ namespace sandbox
 			}
 
 			return required_exts.empty();
+		}
+
+		queue_family_indices find_queue_families(VkPhysicalDevice dev)
+		{
+			queue_family_indices indices;
+
+			unsigned fam_count = 0;
+			vkGetPhysicalDeviceQueueFamilyProperties2(dev, &fam_count, nullptr);
+
+			std::vector<VkQueueFamilyProperties2> queue_fams(fam_count);
+
+			for (auto& q : queue_fams)
+			{
+				q.sType = VK_STRUCTURE_TYPE_QUEUE_FAMILY_PROPERTIES_2;
+			}
+
+			vkGetPhysicalDeviceQueueFamilyProperties2(dev, &fam_count, queue_fams.data());
+
+
+
+			// find at least one queue family that supports VK_QUEUE_GRAPHICS_BIT
+			int i = 0;
+			for (const auto& qf : queue_fams)
+			{
+				if (qf.queueFamilyProperties.queueFlags & VK_QUEUE_GRAPHICS_BIT)
+				{
+					indices.graphics_family = i;
+				}
+
+				VkBool32 present_support = false;
+				vkGetPhysicalDeviceSurfaceSupportKHR(dev, i, surface, &present_support);
+
+				if (present_support)
+					indices.present_family = i;
+
+
+				if (indices.is_complete())
+					break;
+
+				i++;
+			}
+
+			return indices;
 		}
 
 		/*
@@ -1485,6 +1561,11 @@ namespace sandbox
 			
 		}
 		
+		void wait_for_device_completion()
+		{
+			vkDeviceWaitIdle(dev);
+		}
+
 		void destroy_resources()
 		{
 			for (size_t i = 0; i < vulkan::max_frames_in_flight; i++)
@@ -1493,28 +1574,10 @@ namespace sandbox
 				vkDestroySemaphore(dev, rp_semaphores[i], nullptr);
 				vkDestroyFence(dev, in_flight_fences[i], nullptr);
 			}
-			
+
+			KHR::clean_swap_chain();
 			vkDestroyCommandPool(dev, cmd_pool, nullptr);
-
-			for (auto fb : sc_framebuffers)
-			{
-				vkDestroyFramebuffer(dev, fb, nullptr);
-			}
-
-			vkDestroyRenderPass(dev, render_pass, nullptr);
-
-			vkDestroyPipeline(dev, graphics_pipeline, nullptr);
-
-			vkDestroyPipelineLayout(dev, pipeline_layout, nullptr);
-
-			for (auto iv : sc_image_views)
-			{
-				vkDestroyImageView(dev, iv, nullptr);
-			}
-
-			vkDestroySwapchainKHR(dev, KHR::swap_chain, nullptr);
-
-			vkDestroyDevice(vulkan::dev, nullptr);
+			vkDestroyDevice(dev, nullptr);
 
 			if (debug::enable_validation_layers)
 			{
@@ -1524,11 +1587,6 @@ namespace sandbox
 			vkDestroySurfaceKHR(instance, surface, nullptr);
 
 			vkDestroyInstance(instance, nullptr);
-		}
-
-		void wait_for_device_completion()
-		{
-			vkDeviceWaitIdle(dev);
 		}
 	}
 
