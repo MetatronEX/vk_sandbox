@@ -179,6 +179,8 @@ namespace sandbox
 
 		void create_vertex_buffer();
 
+		void create_index_buffer();
+
 		uint32_t find_memory_type(uint32_t type_filter, VkMemoryPropertyFlags props);
 
 		void create_cmd_buffers();

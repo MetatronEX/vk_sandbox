@@ -54,9 +54,15 @@ namespace sandbox
 
 		const std::vector<vertex> vertices =
 		{
-			{{0.f,-.5f},{1.f,0.f,0.f}},
-			{{.5f, .5f},{0.f,1.f,0.f}},
-			{{-.5f,.5f},{0.f,0.f,1.f}}
+			{{-.5f,-.5f},{1.f,1.f,1.f}},
+			{{ .5f,-.5f},{1.f,0.f,0.f}},
+			{{ .5f, .5f},{0.f,1.f,0.f}},
+			{{-.5f, .5f},{0.f,0.f,1.f}}
+		};
+
+		const std::vector<uint16_t> indices =
+		{
+			0, 1, 2, 2, 3, 0
 		};
 
 		VkInstance						instance;
@@ -79,6 +85,9 @@ namespace sandbox
 
 		VkBuffer						vertex_buffer;
 		VkDeviceMemory					vtx_buffer_mem;
+
+		VkBuffer						index_buffer;
+		VkDeviceMemory					idx_buffer_mem;
 
 		size_t							curr_frame{ 0 };
 
@@ -1760,7 +1769,32 @@ namespace sandbox
 			vkDestroyBuffer(dev, staging_buffer, nullptr);
 			vkFreeMemory(dev, staging_buffer_memory, nullptr);
 		}
-				
+		
+		void create_index_buffer()
+		{
+			VkDeviceSize buffer_size = sizeof(uint16_t) * indices.size();
+
+			VkBuffer		staging_buffer;
+			VkDeviceMemory	staging_buffer_mem;
+
+			create_buffer(buffer_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+				VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+				staging_buffer, staging_buffer_mem);
+
+			void* data;
+			vkMapMemory(dev, staging_buffer_mem, 0, buffer_size, 0, &data);
+			memcpy(data, indices.data(), static_cast<size_t>(buffer_size));
+			vkUnmapMemory(dev, staging_buffer_mem);
+
+			create_buffer(buffer_size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+				VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, index_buffer, idx_buffer_mem);
+
+			copy_buffer(staging_buffer, index_buffer, buffer_size);
+
+			vkDestroyBuffer(dev, staging_buffer, nullptr);
+			vkFreeMemory(dev, staging_buffer_mem, nullptr);
+		}
+
 		void create_cmd_buffers()
 		{
 			cmd_buffers.resize(sc_framebuffers.size());
@@ -1858,7 +1892,10 @@ namespace sandbox
 
 				vkCmdBindVertexBuffers(cmd_buffers[i], 0, 1, vtx_buffers, offsets);
 
-				vkCmdDraw(cmd_buffers[i], static_cast<uint32_t>(vertices.size()), 1, 0, 0);
+				vkCmdBindIndexBuffer(cmd_buffers[i], index_buffer, 0, VK_INDEX_TYPE_UINT16);
+
+				//vkCmdDraw(cmd_buffers[i], static_cast<uint32_t>(vertices.size()), 1, 0, 0);
+				vkCmdDrawIndexed(cmd_buffers[i], static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
 
 				vkCmdEndRenderPass(cmd_buffers[i]);
 
@@ -1911,6 +1948,9 @@ namespace sandbox
 
 			KHR::clean_swap_chain();
 
+			vkDestroyBuffer(dev, index_buffer, nullptr);
+			vkFreeMemory(dev, idx_buffer_mem, nullptr);
+
 			vkDestroyBuffer(dev, vertex_buffer, nullptr);
 			vkFreeMemory(dev, vtx_buffer_mem, nullptr);
 
@@ -1950,6 +1990,7 @@ namespace sandbox
 		vulkan::create_framebuffers();
 		vulkan::create_cmd_pool();
 		vulkan::create_vertex_buffer();
+		vulkan::create_index_buffer();
 		vulkan::create_cmd_buffers();
 		vulkan::create_syncs();
 	}
