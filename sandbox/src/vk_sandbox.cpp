@@ -54,15 +54,22 @@ namespace sandbox
 
 		const std::vector<vertex> vertices =
 		{
-			{{-.5f,-.5f},{1.f,1.f,1.f}},
-			{{ .5f,-.5f},{1.f,0.f,0.f}},
-			{{ .5f, .5f},{0.f,1.f,0.f}},
-			{{-.5f, .5f},{0.f,0.f,1.f}}
+			{{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+			{{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
+			{{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
+			{{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}}
 		};
 
 		const std::vector<uint16_t> indices =
 		{
 			0, 1, 2, 2, 3, 0
+		};
+
+		struct UniformBufferObject
+		{
+			glm::mat4 model;
+			glm::mat4 view;
+			glm::mat4 proj;
 		};
 
 		VkInstance						instance;
@@ -72,6 +79,8 @@ namespace sandbox
 
 		VkRenderPass					render_pass;
 		VkPipelineLayout				pipeline_layout;
+
+		VkDescriptorSetLayout			descriptor_set_layout;
 
 		VkQueue							graphics_queue;
 		VkQueue							present_queue;
@@ -89,7 +98,12 @@ namespace sandbox
 		VkBuffer						index_buffer;
 		VkDeviceMemory					idx_buffer_mem;
 
+		VkDescriptorPool				descriptor_pool;
+
 		size_t							curr_frame{ 0 };
+
+		std::vector<VkBuffer>			uniform_buffers;
+		std::vector<VkDeviceMemory>		ubo_mems;
 
 		std::vector<VkImage>			sc_images;
 		std::vector<VkImageView>		sc_image_views;
@@ -97,6 +111,8 @@ namespace sandbox
 		std::vector<VkFramebuffer>		sc_framebuffers;
 
 		std::vector<VkCommandBuffer>	cmd_buffers;
+
+		std::vector<VkDescriptorSet>	descriptor_sets;
 
 		std::vector<VkSemaphore>		image_semaphores;
 		std::vector<VkSemaphore>		rp_semaphores;
@@ -227,6 +243,8 @@ namespace sandbox
 		
 		namespace KHR
 		{
+			std::chrono::steady_clock::time_point start_time;
+
 			VkSwapchainKHR swap_chain;
 
 			/*
@@ -402,6 +420,14 @@ namespace sandbox
 					vkDestroyFramebuffer(dev, fb, nullptr);
 				}
 
+				for (size_t i = 0; i < sc_images.size(); i++)
+				{
+					vkDestroyBuffer(dev, uniform_buffers[i], nullptr);
+					vkFreeMemory(dev, ubo_mems[i], nullptr);
+				}
+
+				vkDestroyDescriptorPool(dev, descriptor_pool, nullptr);
+
 				vkFreeCommandBuffers(dev, cmd_pool, static_cast<uint32_t>(cmd_buffers.size()), cmd_buffers.data());
 
 				vkDestroyRenderPass(dev, render_pass, nullptr);
@@ -439,7 +465,38 @@ namespace sandbox
 				create_render_pass();
 				create_graphics_pipeline();
 				create_framebuffers();
+				create_uniform_buffers();
+				create_descriptor_pool();
+				create_descriptor_sets();
 				create_cmd_buffers();
+			}
+
+			/*
+			This function will generate a new transformation every frame to make the geometry spin around. 
+			[Translation: will die soon.]
+			We need to include two new headers to implement this functionality:
+			*/
+			void update_ubo(uint32_t curr_img)
+			{
+				auto curr_time = std::chrono::high_resolution_clock::now();
+				float time = std::chrono::duration<float, std::chrono::seconds::period>(curr_time - start_time).count();
+
+				UniformBufferObject ubo{};
+				ubo.model = glm::rotate(glm::mat4(1.f), time * glm::radians(90.f), glm::vec3(0.f, 0.f, 1.f));
+				ubo.view  = glm::lookAt(glm::vec3(2.f, 2.f, 2.f), glm::vec3(0.f, 0.f, 0.f), glm::vec3(0.f, 0.f, 1.f));
+				ubo.proj = glm::perspective(glm::radians(90.f), 
+					static_cast<float>(sc_extent.width) / static_cast<float>(sc_extent.height), 0.1f, 10.f);
+				/*
+				GLM was originally designed for OpenGL, where the Y coordinate of the clip coordinates is inverted. The easiest way 
+				to compensate for that is to flip the sign on the scaling factor of the Y axis in the projection matrix. If you don't 
+				do this, then the image will be rendered upside down.
+				*/
+				ubo.proj[1][1] *= -1.f;
+
+				void* data;
+				vkMapMemory(dev, ubo_mems[curr_img], 0, sizeof(ubo), 0, &data);
+				memcpy(data, &ubo, sizeof(ubo));
+				vkUnmapMemory(dev, ubo_mems[curr_img]);
 			}
 
 			void draw_frame()
@@ -499,6 +556,8 @@ namespace sandbox
 
 				// mark the image as now being in use by this frame
 				images_in_flight[image_index] = in_flight_fences[curr_frame];
+
+				update_ubo(image_index);
 
 				VkSubmitInfo submit{};
 				submit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -1097,6 +1156,37 @@ namespace sandbox
 			}
 		}
 
+		void create_descriptor_set_layout()
+		{
+			// Every binding needs to be described through a VkDescriptorSetLayoutBinding struct.
+
+			VkDescriptorSetLayoutBinding ubo_layout_bind{};
+			ubo_layout_bind.binding = 0;
+			ubo_layout_bind.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+			ubo_layout_bind.descriptorCount = 1;
+
+			/*
+			The stageFlags field can be a combination of VkShaderStageFlagBits values or 
+			the value VK_SHADER_STAGE_ALL_GRAPHICS. 
+			*/
+			ubo_layout_bind.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+			/*
+			pImmutableSamplers field is only relevant for image sampling related descriptors
+			*/
+			ubo_layout_bind.pImmutableSamplers = nullptr;
+
+			// Note: All of the descriptor bindings are combined into a single VkDescriptorSetLayout object.
+			VkDescriptorSetLayoutCreateInfo dsl_info{};
+			dsl_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+			dsl_info.bindingCount = 1;
+			dsl_info.pBindings = &ubo_layout_bind;
+
+			if (!OP_SUCCESS(vkCreateDescriptorSetLayout(dev, &dsl_info, nullptr, &descriptor_set_layout)))
+			{
+				throw std::runtime_error("Descriptor set layout creation failed!");
+			}
+		}
+
 		/*
 		See: https://vulkan-tutorial.com/en/Drawing_a_triangle/Graphics_pipeline_basics/Introduction
 		Important read.
@@ -1246,7 +1336,7 @@ namespace sandbox
 			*/
 			raster_info.lineWidth = 1.f;
 			raster_info.cullMode = VK_CULL_MODE_BACK_BIT;
-			raster_info.frontFace = VK_FRONT_FACE_CLOCKWISE;
+			raster_info.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
 			raster_info.depthBiasEnable = VK_FALSE;
 			raster_info.depthBiasConstantFactor = 0.f;
 			raster_info.depthBiasClamp = 0.f;
@@ -1364,10 +1454,16 @@ namespace sandbox
 			// pipeline layout
 			VkPipelineLayoutCreateInfo pll_info{};
 			pll_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-			pll_info.setLayoutCount = 0;
-			pll_info.pSetLayouts = nullptr;
+			/*
+			need to specify the descriptor set layout during pipeline creation to tell Vulkan which descriptors
+			the shaders will be using. Descriptor set layouts are specified in the pipeline layout object.
+			*/
+			pll_info.setLayoutCount = 1;
+			pll_info.pSetLayouts = &descriptor_set_layout;
 			pll_info.pushConstantRangeCount = 0;
 			pll_info.pPushConstantRanges = nullptr;
+			
+			
 
 			if (!OP_SUCCESS(vkCreatePipelineLayout(dev, &pll_info, nullptr, &pipeline_layout)))
 			{
@@ -1482,47 +1578,6 @@ namespace sandbox
 			{
 				throw std::runtime_error("Failed to create command pool!");
 			}
-		}
-
-		// to deprecate
-		/*
-		* Graphics cards can offer different types of memory to allocate from. Each type of memory varies in
-		terms of allowed operations and performance characteristics. We need to combine the requirements of
-		the buffer and our own application requirements to find the right type of memory to use.
-		*/
-		uint32_t find_memory_type(uint32_t type_filter, VkMemoryPropertyFlags props)
-		{
-			VkPhysicalDeviceMemoryProperties2 mem_props{};
-			mem_props.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PROPERTIES_2;
-
-			vkGetPhysicalDeviceMemoryProperties2(pd, &mem_props);
-
-			/*
-			* The VkPhysicalDeviceMemoryProperties structure has two arrays memoryTypes and memoryHeaps.
-			Memory heaps are distinct memory resources like dedicated VRAM and swap space in RAM for when VRAM
-			runs out. The different types of memory exist within these heaps.
-
-			we're not just interested in a memory type that is suitable for the vertex buffer. We also need to
-			be able to write our vertex data to that memory. The memoryTypes array consists of VkMemoryType
-			structs that specify the heap and properties of each type of memory. The properties define special
-			features of the memory, like being able to map it so we can write to it from the CPU. This property
-			is indicated with VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, but we also need to use the
-			VK_MEMORY_PROPERTY_HOST_COHERENT_BIT property.
-			*/
-			for (uint32_t i = 0; i < mem_props.memoryProperties.memoryTypeCount; i++)
-			{
-				/*
-				* We may have more than one desirable property, so we should check if the result of the bitwise
-				AND is not just non-zero, but equal to the desired properties bit field. If there is a memory
-				type suitable for the buffer that also has all of the properties we need, then we return its
-				index, otherwise we throw an exception.
-				*/
-				if ((type_filter & (1 << i)) &&
-					(mem_props.memoryProperties.memoryTypes[i].propertyFlags & props) == props)
-					return i;
-			}
-
-			throw std::runtime_error("Suitable memory type not found!");
 		}
 
 		void create_buffer(VkDeviceSize size, VkBufferUsageFlags usage, 
@@ -1795,6 +1850,134 @@ namespace sandbox
 			vkFreeMemory(dev, staging_buffer_mem, nullptr);
 		}
 
+		void create_uniform_buffers()
+		{
+			VkDeviceSize buffer_size = sizeof(UniformBufferObject);
+
+			uniform_buffers.resize(sc_images.size());
+			ubo_mems.resize(sc_images.size());
+
+			for (size_t i = 0; i < sc_images.size(); i++)
+			{
+				create_buffer(buffer_size, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+					VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+					uniform_buffers[i], ubo_mems[i]);
+			}
+		}
+
+		void create_descriptor_pool()
+		{
+			/*
+			describe which descriptor types our descriptor sets are going to contain and how many of them, 
+			using VkDescriptorPoolSize structures.
+			*/
+			VkDescriptorPoolSize pool_size{};
+			pool_size.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+			pool_size.descriptorCount = static_cast<uint32_t>(sc_images.size());
+
+			/*
+			allocate one of these descriptors for every frame. This pool size structure is referenced 
+			by the main VkDescriptorPoolCreateInfo:
+
+			structure has an optional flag similar to command pools that determines if individual descriptor 
+			sets can be freed or not: VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT.
+			*/
+			VkDescriptorPoolCreateInfo pool_info{};
+			pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+			pool_info.poolSizeCount = 1;
+			pool_info.pPoolSizes = &pool_size;
+			/*
+			Aside from the maximum number of individual descriptors that are available, we also need to specify 
+			the maximum number of descriptor sets that may be allocated:
+			*/
+			pool_info.maxSets = static_cast<uint32_t>(sc_images.size());
+
+			if (!OP_SUCCESS(vkCreateDescriptorPool(dev, &pool_info, nullptr, &descriptor_pool)))
+			{
+				throw std::runtime_error("Descriptor pool creation failed!");
+			}
+		}
+
+		void create_descriptor_sets()
+		{
+			/*
+			A descriptor set allocation is described with a VkDescriptorSetAllocateInfo struct. You need to specify 
+			the descriptor pool to allocate from, the number of descriptor sets to allocate, and the descriptor layout 
+			to base them on:
+			*/
+
+			/*
+			create one descriptor set for each swap chain image, all with the same layout. Unfortunately we do need all 
+			the copies of the layout because the next function expects an array matching the number of sets.
+			*/
+			std::vector<VkDescriptorSetLayout> layouts(sc_images.size(), descriptor_set_layout);
+			VkDescriptorSetAllocateInfo dsa_info{};
+			dsa_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+			dsa_info.descriptorPool = descriptor_pool;
+			dsa_info.descriptorSetCount = static_cast<uint32_t>(sc_images.size());
+			dsa_info.pSetLayouts = layouts.data();
+
+			descriptor_sets.resize(sc_images.size());
+
+			/*
+			 The call to vkAllocateDescriptorSets will allocate descriptor sets, each with one uniform buffer descriptor.
+			*/
+			if (!OP_SUCCESS(vkAllocateDescriptorSets(dev, &dsa_info, descriptor_sets.data())))
+			{
+				throw std::runtime_error("Descriptor sets allocation failure!");
+			}
+
+			/*
+			configure each descriptor 
+			*/
+			for (size_t i = 0; i < sc_images.size(); i++)
+			{
+				/*
+				Descriptors that refer to buffers, like our uniform buffer descriptor, are configured with a VkDescriptorBufferInfo 
+				struct. This structure specifies the buffer and the region within it that contains the data for the descriptor.
+				*/
+				VkDescriptorBufferInfo db_info{};
+				db_info.buffer = uniform_buffers[i];
+				db_info.offset = 0;
+				db_info.range = sizeof(UniformBufferObject); // can use VK_WHOLE_SIZE
+
+				/*
+				configuration of descriptors is updated using the vkUpdateDescriptorSets function, which takes an array of 
+				VkWriteDescriptorSet structs as parameter.
+				*/
+				VkWriteDescriptorSet ds_writes{};
+				ds_writes.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+				/*
+				The first two fields specify the descriptor set to update and the binding. We gave our uniform buffer binding index 0. 
+				Remember that descriptors can be arrays, so we also need to specify the first index in the array that we want to update. 
+				We're not using an array, so the index is simply 0.
+				*/
+				ds_writes.dstSet = descriptor_sets[i];
+				ds_writes.dstBinding = 0;
+				ds_writes.dstArrayElement = 0;
+				/*
+				need to specify the type of descriptor again. It's possible to update multiple descriptors at once in an array, starting at 
+				index dstArrayElement. The descriptorCount field specifies how many array elements you want to update.
+				*/
+				ds_writes.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+				ds_writes.descriptorCount = 1;
+				/*
+				The last field references an array with descriptorCount structs that actually configure the descriptors. It depends on the type 
+				of descriptor which one of the three you actually need to use. The pBufferInfo field is used for descriptors that refer to buffer 
+				data, pImageInfo is used for descriptors that refer to image data, and pTexelBufferView is used for descriptors that refer to 
+				buffer views. Our descriptor is based on buffers, so we're using pBufferInfo.
+				*/
+				ds_writes.pBufferInfo = &db_info;
+				ds_writes.pImageInfo = nullptr;
+				ds_writes.pTexelBufferView = nullptr;
+				/*
+				The updates are applied using vkUpdateDescriptorSets. It accepts two kinds of arrays as parameters: an array of VkWriteDescriptorSet 
+				and an array of VkCopyDescriptorSet. The latter can be used to copy descriptors to each other, as its name implies.
+				*/
+				vkUpdateDescriptorSets(dev, 1, &ds_writes, 0, nullptr);
+			}
+		}
+
 		void create_cmd_buffers()
 		{
 			cmd_buffers.resize(sc_framebuffers.size());
@@ -1894,6 +2077,20 @@ namespace sandbox
 
 				vkCmdBindIndexBuffer(cmd_buffers[i], index_buffer, 0, VK_INDEX_TYPE_UINT16);
 
+				/*
+				bind the right descriptor set for each swap chain image to the descriptors in the shader with vkCmdBindDescriptorSets. 
+				This needs to be done before the vkCmdDrawIndexed call:
+
+				Unlike vertex and index buffers, descriptor sets are not unique to graphics pipelines. Therefore we need to specify if 
+				we want to bind descriptor sets to the graphics or compute pipeline. The next parameter is the layout that the descriptors 
+				are based on. The next three parameters specify the index of the first descriptor set, the number of sets to bind, and the 
+				array of sets to bind.
+
+				The last two parameters specify an array of offsets that are used for dynamic descriptors.
+				*/
+				vkCmdBindDescriptorSets(cmd_buffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout, 0, 1, 
+					&descriptor_sets[i], 0, nullptr);
+
 				//vkCmdDraw(cmd_buffers[i], static_cast<uint32_t>(vertices.size()), 1, 0, 0);
 				vkCmdDrawIndexed(cmd_buffers[i], static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
 
@@ -1948,6 +2145,8 @@ namespace sandbox
 
 			KHR::clean_swap_chain();
 
+			vkDestroyDescriptorSetLayout(dev, descriptor_set_layout, nullptr);
+
 			vkDestroyBuffer(dev, index_buffer, nullptr);
 			vkFreeMemory(dev, idx_buffer_mem, nullptr);
 
@@ -1977,6 +2176,8 @@ namespace sandbox
 
 	void app::initialize()
 	{
+		vulkan::KHR::start_time = std::chrono::high_resolution_clock::now();
+
 		glfw::glfw_initialization(RES_WIDTH, RES_HEIGHT);
 		vulkan::create_instance();
 		vulkan::debug::setup_debug_messenger();
@@ -1986,11 +2187,15 @@ namespace sandbox
 		vulkan::KHR::create_swap_chain();
 		vulkan::create_image_views();
 		vulkan::create_render_pass();
+		vulkan::create_descriptor_set_layout();
 		vulkan::create_graphics_pipeline();
 		vulkan::create_framebuffers();
 		vulkan::create_cmd_pool();
 		vulkan::create_vertex_buffer();
 		vulkan::create_index_buffer();
+		vulkan::create_uniform_buffers();
+		vulkan::create_descriptor_pool();
+		vulkan::create_descriptor_sets();
 		vulkan::create_cmd_buffers();
 		vulkan::create_syncs();
 	}
