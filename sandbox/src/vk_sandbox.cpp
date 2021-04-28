@@ -78,6 +78,7 @@ namespace sandbox
 		VkCommandPool					cmd_pool;
 
 		VkBuffer						vertex_buffer;
+		VkDeviceMemory					vtx_buffer_mem;
 
 		size_t							curr_frame{ 0 };
 
@@ -1448,7 +1449,7 @@ namespace sandbox
 		{
 			VkBufferCreateInfo b_info{};
 			b_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-			b_info.size = sizeof(vertex) * vertices.size();
+			b_info.size = sizeof(vertices[0]) * vertices.size();
 			/*
 			* usage indicates which purpose the data in the buffer is going to be used. 
 			It is possible to specify multiple purposes using a bitwise or.
@@ -1492,6 +1493,46 @@ namespace sandbox
 			bmr_info.buffer = vertex_buffer;
 			
 			vkGetBufferMemoryRequirements2(dev, &bmr_info, &mem_req);
+
+			// memory allocation
+			VkMemoryAllocateInfo ma_info{};
+			ma_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+			ma_info.allocationSize = mem_req.memoryRequirements.size;
+			ma_info.memoryTypeIndex = find_memory_type(mem_req.memoryRequirements.memoryTypeBits,
+				VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+
+			if (!OP_SUCCESS(vkAllocateMemory(dev, &ma_info, nullptr, &vtx_buffer_mem)))
+			{
+				throw std::runtime_error("vertex buffer memory allocation failed!");
+			}
+
+			VkBindBufferMemoryInfo bbm_info{};
+			bbm_info.sType = VK_STRUCTURE_TYPE_BIND_BUFFER_MEMORY_INFO;
+			bbm_info.buffer = vertex_buffer;
+			bbm_info.memory = vtx_buffer_mem;
+			bbm_info.memoryOffset = 0;
+
+			vkBindBufferMemory2(dev, 1, &bbm_info);
+
+			/*
+			* memcpy the vertex data to the mapped memory and unmap it again using vkUnmapMemory. Unfortunately
+			the driver may not immediately copy the data into the buffer memory, for example because of caching.
+			It is also possible that writes to the buffer are not visible in the mapped memory yet. There are
+			two ways to deal with that problem:
+
+				- Use a memory heap that is host coherent, indicated with VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+
+				- Call vkFlushMappedMemoryRanges after writing to the mapped memory, and call
+				vkInvalidateMappedMemoryRanges before reading from the mapped memory
+
+			We went for the first approach, which ensures that the mapped memory always matches the contents of
+			the allocated memory. Do keep in mind that this may lead to slightly worse performance than explicit
+			flushing.
+			*/
+			void* data;
+			vkMapMemory(dev, vtx_buffer_mem, 0, b_info.size, 0, &data);
+			memcpy(data, vertices.data(), static_cast<size_t>(b_info.size));
+			vkUnmapMemory(dev, vtx_buffer_mem);
 		}
 
 		/*
@@ -1510,10 +1551,24 @@ namespace sandbox
 			* The VkPhysicalDeviceMemoryProperties structure has two arrays memoryTypes and memoryHeaps. 
 			Memory heaps are distinct memory resources like dedicated VRAM and swap space in RAM for when VRAM 
 			runs out. The different types of memory exist within these heaps.
+
+			we're not just interested in a memory type that is suitable for the vertex buffer. We also need to 
+			be able to write our vertex data to that memory. The memoryTypes array consists of VkMemoryType 
+			structs that specify the heap and properties of each type of memory. The properties define special 
+			features of the memory, like being able to map it so we can write to it from the CPU. This property 
+			is indicated with VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, but we also need to use the 
+			VK_MEMORY_PROPERTY_HOST_COHERENT_BIT property.
 			*/
 			for (uint32_t i = 0; i < mem_props.memoryProperties.memoryTypeCount; i++)
 			{
-				if (type_filter & (1 << i))
+				/*
+				* We may have more than one desirable property, so we should check if the result of the bitwise 
+				AND is not just non-zero, but equal to the desired properties bit field. If there is a memory 
+				type suitable for the buffer that also has all of the properties we need, then we return its 
+				index, otherwise we throw an exception.
+				*/
+				if ((type_filter & (1 << i)) && 
+					(mem_props.memoryProperties.memoryTypes[i].propertyFlags & props) == props)
 					return i;
 			}
 
@@ -1612,7 +1667,12 @@ namespace sandbox
 
 				vkCmdBindPipeline(cmd_buffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, graphics_pipeline);
 
-				vkCmdDraw(cmd_buffers[i], 3, 1, 0, 0);
+				VkBuffer vtx_buffers[] = { vertex_buffer };
+				VkDeviceSize offsets[] = { 0 };
+
+				vkCmdBindVertexBuffers(cmd_buffers[i], 0, 1, vtx_buffers, offsets);
+
+				vkCmdDraw(cmd_buffers[i], static_cast<uint32_t>(vertices.size()), 1, 0, 0);
 
 				vkCmdEndRenderPass(cmd_buffers[i]);
 
@@ -1666,6 +1726,7 @@ namespace sandbox
 			KHR::clean_swap_chain();
 
 			vkDestroyBuffer(dev, vertex_buffer, nullptr);
+			vkFreeMemory(dev, vtx_buffer_mem, nullptr);
 
 			vkDestroyCommandPool(dev, cmd_pool, nullptr);
 			vkDestroyDevice(dev, nullptr);
@@ -1702,6 +1763,7 @@ namespace sandbox
 		vulkan::create_graphics_pipeline();
 		vulkan::create_framebuffers();
 		vulkan::create_cmd_pool();
+		vulkan::create_vertex_buffer();
 		vulkan::create_cmd_buffers();
 		vulkan::create_syncs();
 	}
