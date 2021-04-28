@@ -2,4 +2,4 @@ build/
 build/*
 install/
 x64/
-sandbox/shader/
+shader/

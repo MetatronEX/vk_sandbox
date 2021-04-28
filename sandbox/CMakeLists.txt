@@ -12,7 +12,12 @@ file(GLOB_RECURSE SOURCES
 ) 
 
 file(GLOB_RECURSE SHADERS
-	shader/*.spv
+	shader/*.vert
+	shader/*.frag
+	shader/*.tesc
+	shader/*.tese
+	shader/*.geom
+	shader/*.comp
 )
 
 # generate visual studio project filters
