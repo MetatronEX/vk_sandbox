@@ -182,6 +182,21 @@ namespace sandbox
 
 		void create_cmd_pool();
 
+		uint32_t find_mem_type(uint32_t type_filter, VkMemoryPropertyFlags props);
+
+		void create_image(uint32_t tex_w, uint32_t tex_h, VkFormat fmt, VkImageTiling tiling,
+			VkImageUsageFlags usage, VkMemoryPropertyFlags props, VkImage& img, VkDeviceMemory& img_mem);
+
+		VkCommandBuffer begin_single_time_cmds();
+
+		void end_single_time_cmds(VkCommandBuffer cmd_buffer);
+
+		void create_texture_image();
+
+		void transition_image_layout(VkImage img, VkFormat fmt, VkImageLayout old_layout, VkImageLayout new_layout);
+
+		void copy_buffer_to_img(VkBuffer buffer, VkImage img, uint32_t w, uint32_t h);
+
 		void create_buffer(VkDeviceSize size, VkBufferUsageFlags usage, 
 			VkMemoryPropertyFlags props,
 			VkBuffer &buffer, VkDeviceMemory &dev_mem);
