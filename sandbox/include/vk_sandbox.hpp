@@ -4,11 +4,14 @@
 #define GLFW_EXPOSE_NATIVE_WIN32
 #include <GLFW/glfw3native.h>
 
+#include <glm.hpp>
+
 #include <stdexcept>
 #include <cstdlib>
 #include <iostream>
 #include <vector>
 #include <optional>
+#include <array>
 
 namespace sandbox
 {
@@ -94,6 +97,56 @@ namespace sandbox
 			}
 		};
 
+		struct vertex
+		{
+			glm::vec2 position;
+			glm::vec3 color;
+
+			static VkVertexInputBindingDescription get_binding_desc()
+			{
+				/*
+				* A vertex binding describes at which rate to load data from memory throughout the vertices. 
+				It specifies the number of bytes between data entries and whether to move to the next data 
+				entry after each vertex or after each instance.
+				*/
+				VkVertexInputBindingDescription bind_desc{};
+				/*
+				* All of our per-vertex data is packed together in one array, so we're only going to have one 
+				binding. The binding parameter specifies the index of the binding in the array of bindings. 
+				The stride parameter specifies the number of bytes from one entry to the next, and the 
+				inputRate parameter can have one of the following values:
+
+					- VK_VERTEX_INPUT_RATE_VERTEX: Move to the next data entry after each vertex
+					- VK_VERTEX_INPUT_RATE_INSTANCE: Move to the next data entry after each instance
+
+				We're not going to use instanced rendering, so we'll stick to per-vertex data.
+				*/
+				bind_desc.binding = 0;
+				bind_desc.stride = sizeof(vertex);
+				bind_desc.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+				return bind_desc;
+			}
+
+			static std::array<VkVertexInputAttributeDescription, 2>
+				get_attr_desc()
+			{
+				std::array<VkVertexInputAttributeDescription, 2> attr_desc{};
+
+				attr_desc[0].binding = 0;
+				attr_desc[0].location = 0;
+				attr_desc[0].format = VK_FORMAT_R32G32_SFLOAT;
+				attr_desc[0].offset = offsetof(vertex, position);
+
+				attr_desc[1].binding = 0;
+				attr_desc[1].location = 1;
+				attr_desc[1].format = VK_FORMAT_R32G32B32_SFLOAT;
+				attr_desc[1].offset = offsetof(vertex, color);
+
+				return attr_desc;
+			}
+		};
+
 		void create_instance();
 
 		bool check_dev_extension_support(VkPhysicalDevice dev);
@@ -117,6 +170,16 @@ namespace sandbox
 		void create_framebuffers();
 
 		void create_cmd_pool();
+
+		void create_buffer(VkDeviceSize size, VkBufferUsageFlags usage, 
+			VkMemoryPropertyFlags props,
+			VkBuffer &buffer, VkDeviceMemory &dev_mem);
+
+		void copy_buffer(VkBuffer src, VkBuffer dst, VkDeviceSize size);
+
+		void create_vertex_buffer();
+
+		uint32_t find_memory_type(uint32_t type_filter, VkMemoryPropertyFlags props);
 
 		void create_cmd_buffers();
 

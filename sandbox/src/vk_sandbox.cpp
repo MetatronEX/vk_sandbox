@@ -52,6 +52,13 @@ namespace sandbox
 
 		const std::vector<const char*> dev_extensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
 
+		const std::vector<vertex> vertices =
+		{
+			{{0.f,-.5f},{1.f,0.f,0.f}},
+			{{.5f, .5f},{0.f,1.f,0.f}},
+			{{-.5f,.5f},{0.f,0.f,1.f}}
+		};
+
 		VkInstance						instance;
 		VkPhysicalDevice				pd{ VK_NULL_HANDLE };
 		VkDevice						dev;
@@ -69,6 +76,9 @@ namespace sandbox
 		VkExtent2D						sc_extent;
 
 		VkCommandPool					cmd_pool;
+
+		VkBuffer						vertex_buffer;
+		VkDeviceMemory					vtx_buffer_mem;
 
 		size_t							curr_frame{ 0 };
 
@@ -832,6 +842,36 @@ namespace sandbox
 			
 			devq_info.queueFamilyIndex = indices.present_family.value();
 			vkGetDeviceQueue2(dev, &devq_info, &present_queue);
+
+			/*
+			Note:
+
+			Transfer queue
+
+			The buffer copy command requires a queue family that supports transfer operations, 
+			which is indicated using VK_QUEUE_TRANSFER_BIT. The good news is that any queue family 
+			with VK_QUEUE_GRAPHICS_BIT or VK_QUEUE_COMPUTE_BIT capabilities already implicitly support 
+			VK_QUEUE_TRANSFER_BIT operations. The implementation is not required to explicitly list it 
+			in queueFlags in those cases.
+			
+			If you like a challenge, then you can still try to use a different queue family specifically 
+			for transfer operations. It will require you to make the following modifications to your program:
+			
+				-	Modify QueueFamilyIndices and findQueueFamilies to explicitly look for a queue family with the 
+				VK_QUEUE_TRANSFER_BIT bit, but not the VK_QUEUE_GRAPHICS_BIT.
+				
+				-	Modify createLogicalDevice to request a handle to the transfer queue
+				
+				-	Create a second command pool for command buffers that are submitted on the transfer queue family
+				
+				-	Change the sharingMode of resources to be VK_SHARING_MODE_CONCURRENT and specify both the graphics 
+				and transfer queue families
+				
+				-	Submit any transfer commands like vkCmdCopyBuffer (which we'll be using in this chapter) to the 
+				transfer queue instead of the graphics queue
+			
+			It's a bit of work, but it'll teach you a lot about how resources are shared between queue families.
+			*/
 		}
 
 		void create_image_views()
@@ -1110,12 +1150,15 @@ namespace sandbox
 			VkPipelineShaderStageCreateInfo stages[] = { vert_ssinfo, frag_ssinfo };
 
 			// vertex input stuff
+			auto binding_description = vertex::get_binding_desc();
+			auto attr_descriptions = vertex::get_attr_desc();
+
 			VkPipelineVertexInputStateCreateInfo vtx_input_info{};
 			vtx_input_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-			vtx_input_info.vertexBindingDescriptionCount = 0;
-			vtx_input_info.pVertexBindingDescriptions = nullptr;
-			vtx_input_info.vertexAttributeDescriptionCount = 0;
-			vtx_input_info.pVertexAttributeDescriptions = nullptr;
+			vtx_input_info.vertexBindingDescriptionCount = 1;
+			vtx_input_info.pVertexBindingDescriptions = &binding_description;
+			vtx_input_info.vertexAttributeDescriptionCount = static_cast<uint32_t>(attr_descriptions.size());
+			vtx_input_info.pVertexAttributeDescriptions = attr_descriptions.data();
 
 			// input assembly stuff
 			VkPipelineInputAssemblyStateCreateInfo ia_info{};
@@ -1432,6 +1475,292 @@ namespace sandbox
 			}
 		}
 
+		// to deprecate
+		/*
+		* Graphics cards can offer different types of memory to allocate from. Each type of memory varies in
+		terms of allowed operations and performance characteristics. We need to combine the requirements of
+		the buffer and our own application requirements to find the right type of memory to use.
+		*/
+		uint32_t find_memory_type(uint32_t type_filter, VkMemoryPropertyFlags props)
+		{
+			VkPhysicalDeviceMemoryProperties2 mem_props{};
+			mem_props.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PROPERTIES_2;
+
+			vkGetPhysicalDeviceMemoryProperties2(pd, &mem_props);
+
+			/*
+			* The VkPhysicalDeviceMemoryProperties structure has two arrays memoryTypes and memoryHeaps.
+			Memory heaps are distinct memory resources like dedicated VRAM and swap space in RAM for when VRAM
+			runs out. The different types of memory exist within these heaps.
+
+			we're not just interested in a memory type that is suitable for the vertex buffer. We also need to
+			be able to write our vertex data to that memory. The memoryTypes array consists of VkMemoryType
+			structs that specify the heap and properties of each type of memory. The properties define special
+			features of the memory, like being able to map it so we can write to it from the CPU. This property
+			is indicated with VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, but we also need to use the
+			VK_MEMORY_PROPERTY_HOST_COHERENT_BIT property.
+			*/
+			for (uint32_t i = 0; i < mem_props.memoryProperties.memoryTypeCount; i++)
+			{
+				/*
+				* We may have more than one desirable property, so we should check if the result of the bitwise
+				AND is not just non-zero, but equal to the desired properties bit field. If there is a memory
+				type suitable for the buffer that also has all of the properties we need, then we return its
+				index, otherwise we throw an exception.
+				*/
+				if ((type_filter & (1 << i)) &&
+					(mem_props.memoryProperties.memoryTypes[i].propertyFlags & props) == props)
+					return i;
+			}
+
+			throw std::runtime_error("Suitable memory type not found!");
+		}
+
+		void create_buffer(VkDeviceSize size, VkBufferUsageFlags usage, 
+			VkMemoryPropertyFlags props,
+			VkBuffer& buffer, VkDeviceMemory& dev_mem)
+		{
+			VkBufferCreateInfo b_info{};
+			b_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+			b_info.size = size;
+			/*
+			* usage indicates which purpose the data in the buffer is going to be used.
+			It is possible to specify multiple purposes using a bitwise or.
+			*/
+			b_info.usage = usage;
+			/*
+			* Just like the images in the swap chain, buffers can also be owned by a specific
+			queue family or be shared between multiple at the same time. The buffer will only
+			be used from the graphics queue, so we can stick to exclusive access.
+
+			The flags parameter is used to configure sparse buffer memory, which is not relevant
+			right now. We'll leave it at the default value of 0.
+			*/
+			b_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+			if (!OP_SUCCESS(vkCreateBuffer(dev,  &b_info, nullptr, &buffer)))
+			{
+				throw std::runtime_error("Buffer creation failed!");
+			}
+
+			/*
+			* The buffer has been created, but it doesn't actually have any memory assigned to it yet.
+			The first step of allocating memory for the buffer is to query its memory requirements
+			using the aptly named vkGetBufferMemoryRequirements function.
+
+			The VkMemoryRequirements struct has three fields:
+
+				- size: The size of the required amount of memory in bytes, may differ from bufferInfo.size.
+
+				- alignment: The offset in bytes where the buffer begins in the allocated region of memory,
+				depends on bufferInfo.usage and bufferInfo.flags.
+
+				- memoryTypeBits: Bit field of the memory types that are suitable for the buffer.
+			*/
+			VkMemoryRequirements2 mem_req{};
+			mem_req.sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2;
+
+			VkBufferMemoryRequirementsInfo2 bmr_info{};
+			bmr_info.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_REQUIREMENTS_INFO_2;
+			bmr_info.buffer = buffer;
+
+			vkGetBufferMemoryRequirements2(dev, &bmr_info, &mem_req);
+
+			/*
+			* Graphics cards can offer different types of memory to allocate from. Each type of memory varies in
+			terms of allowed operations and performance characteristics. We need to combine the requirements of
+			the buffer and our own application requirements to find the right type of memory to use.
+			*/
+			auto find_mem_type = [](uint32_t type_filter, VkMemoryPropertyFlags props)
+			{
+				VkPhysicalDeviceMemoryProperties2 mem_props{};
+				mem_props.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PROPERTIES_2;
+
+				vkGetPhysicalDeviceMemoryProperties2(pd, &mem_props);
+
+				/*
+				* The VkPhysicalDeviceMemoryProperties structure has two arrays memoryTypes and memoryHeaps.
+				Memory heaps are distinct memory resources like dedicated VRAM and swap space in RAM for when VRAM
+				runs out. The different types of memory exist within these heaps.
+
+				we're not just interested in a memory type that is suitable for the vertex buffer. We also need to
+				be able to write our vertex data to that memory. The memoryTypes array consists of VkMemoryType
+				structs that specify the heap and properties of each type of memory. The properties define special
+				features of the memory, like being able to map it so we can write to it from the CPU. This property
+				is indicated with VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, but we also need to use the
+				VK_MEMORY_PROPERTY_HOST_COHERENT_BIT property.
+				*/
+				for (uint32_t i = 0; i < mem_props.memoryProperties.memoryTypeCount; i++)
+				{
+					/*
+					* We may have more than one desirable property, so we should check if the result of the bitwise
+					AND is not just non-zero, but equal to the desired properties bit field. If there is a memory
+					type suitable for the buffer that also has all of the properties we need, then we return its
+					index, otherwise we throw an exception.
+					*/
+					if ((type_filter & (1 << i)) &&
+						(mem_props.memoryProperties.memoryTypes[i].propertyFlags & props) == props)
+						return i;
+				}
+
+				throw std::runtime_error("Suitable memory type not found!");
+			};
+
+			// memory allocation
+			VkMemoryAllocateInfo ma_info{};
+			ma_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+			ma_info.allocationSize = mem_req.memoryRequirements.size;
+			ma_info.memoryTypeIndex = find_mem_type(mem_req.memoryRequirements.memoryTypeBits,
+				VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+
+			/*
+			It should be noted that in a real world application, you're not supposed to actually call vkAllocateMemory 
+			for every individual buffer. The maximum number of simultaneous memory allocations is limited by the 
+			maxMemoryAllocationCount physical device limit, which may be as low as 4096 even on high end hardware 
+			like an NVIDIA GTX 1080. The right way to allocate memory for a large number of objects at the same time is 
+			to create a custom allocator that splits up a single allocation among many different objects by using the 
+			offset parameters that we've seen in many functions.
+
+			You can either implement such an allocator yourself, or use the VulkanMemoryAllocator library provided by 
+			the GPUOpen initiative. 
+			*/
+			if (!OP_SUCCESS(vkAllocateMemory(dev, &ma_info, nullptr, &dev_mem)))
+			{
+				throw std::runtime_error("vertex buffer memory allocation failed!");
+			}
+
+			VkBindBufferMemoryInfo bbm_info{};
+			bbm_info.sType = VK_STRUCTURE_TYPE_BIND_BUFFER_MEMORY_INFO;
+			bbm_info.buffer = buffer;
+			bbm_info.memory = dev_mem;
+			bbm_info.memoryOffset = 0;
+
+			vkBindBufferMemory2(dev, 1, &bbm_info);
+		}
+
+		void copy_buffer(VkBuffer src, VkBuffer dst, VkDeviceSize size)
+		{
+			/*
+			* Memory transfer operations are executed using command buffers, just like drawing commands. 
+			Therefore we must first allocate a temporary command buffer. You may wish to create a separate 
+			command pool for these kinds of short-lived buffers, because the implementation may be able to 
+			apply memory allocation optimizations. You should use the VK_COMMAND_POOL_CREATE_TRANSIENT_BIT 
+			flag during command pool generation in that case.
+			*/
+
+			VkCommandBufferAllocateInfo cba_info{};
+			cba_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+			cba_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+			cba_info.commandPool = cmd_pool;
+			cba_info.commandBufferCount = 1;
+
+			VkCommandBuffer cmd_buffer;
+			vkAllocateCommandBuffers(dev, &cba_info, &cmd_buffer);
+
+			VkCommandBufferBeginInfo begin{};
+			begin.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+			/*
+			going to use the command buffer once and wait with returning from the function until the copy operation 
+			has finished executing. It's good practice to tell the driver about our intent using 
+			VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT.
+			*/
+			begin.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+			vkBeginCommandBuffer(cmd_buffer, &begin);
+
+			/*
+			Contents of buffers are transferred using the vkCmdCopyBuffer command. It takes the source and destination 
+			buffers as arguments, and an array of regions to copy. The regions are defined in VkBufferCopy structs and 
+			consist of a source buffer offset, destination buffer offset and size. It is not possible to specify 
+			VK_WHOLE_SIZE here, unlike the vkMapMemory command.
+			*/
+			VkBufferCopy copy_region{};
+			copy_region.srcOffset = 0;
+			copy_region.dstOffset = 0;
+			copy_region.size = size;
+
+			vkCmdCopyBuffer(cmd_buffer, src, dst, 1, &copy_region);
+
+			vkEndCommandBuffer(cmd_buffer);
+
+			/*
+			Unlike the draw commands, there are no events we need to wait on this time. We just want to execute the transfer 
+			on the buffers immediately. There are again two possible ways to wait on this transfer to complete. We could use 
+			a fence and wait with vkWaitForFences, or simply wait for the transfer queue to become idle with vkQueueWaitIdle. 
+			A fence would allow you to schedule multiple transfers simultaneously and wait for all of them complete, instead 
+			of executing one at a time. That may give the driver more opportunities to optimize.
+			*/
+			VkSubmitInfo submit{};
+			submit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+			submit.commandBufferCount = 1;
+			submit.pCommandBuffers = &cmd_buffer;
+			
+			vkQueueSubmit(graphics_queue, 1, &submit, VK_NULL_HANDLE);
+			vkQueueWaitIdle(graphics_queue);
+
+			vkFreeCommandBuffers(dev, cmd_pool, 1, &cmd_buffer);
+		}
+
+		void create_vertex_buffer()
+		{
+			VkDeviceSize buffer_size = sizeof(vertex) * vertices.size();
+			
+			/*
+				using a new stagingBuffer with stagingBufferMemory for mapping and copying the vertex data.
+
+				use two buffer usage flags:
+
+					- VK_BUFFER_USAGE_TRANSFER_SRC_BIT: Buffer can be used as source in a memory transfer operation.
+					- VK_BUFFER_USAGE_TRANSFER_DST_BIT: Buffer can be used as destination in a memory transfer operation.
+			*/
+			VkBuffer			staging_buffer;
+			VkDeviceMemory		staging_buffer_memory;
+
+			/*
+				use a host visible buffer as temporary buffer and use a device local one as actual vertex buffer.
+			*/
+			create_buffer(buffer_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+				VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+				staging_buffer, staging_buffer_memory);
+
+			/*
+			* memcpy the vertex data to the mapped memory and unmap it again using vkUnmapMemory. Unfortunately
+			the driver may not immediately copy the data into the buffer memory, for example because of caching.
+			It is also possible that writes to the buffer are not visible in the mapped memory yet. There are
+			two ways to deal with that problem:
+
+				- Use a memory heap that is host coherent, indicated with VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+
+				- Call vkFlushMappedMemoryRanges after writing to the mapped memory, and call
+				vkInvalidateMappedMemoryRanges before reading from the mapped memory
+
+			We went for the first approach, which ensures that the mapped memory always matches the contents of
+			the allocated memory. Do keep in mind that this may lead to slightly worse performance than explicit
+			flushing.
+			*/
+			/*
+				vertexBuffer is now allocated from a memory type that is device local, which generally means that we're
+				not able to use vkMapMemory.
+
+				we can copy data from the stagingBuffer to the vertexBuffer.
+
+				We have to indicate that we intend to do that by specifying the transfer source flag for the stagingBuffer
+				and the transfer destination flag for the vertexBuffer, along with the vertex buffer usage flag.
+			*/
+			void* data;
+			vkMapMemory(dev, staging_buffer_memory, 0, buffer_size, 0, &data);
+			memcpy(data, vertices.data(), static_cast<size_t>(buffer_size));
+			vkUnmapMemory(dev, staging_buffer_memory);
+
+			create_buffer(buffer_size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+				VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vertex_buffer, vtx_buffer_mem);
+
+			copy_buffer(staging_buffer, vertex_buffer, buffer_size);
+
+			vkDestroyBuffer(dev, staging_buffer, nullptr);
+			vkFreeMemory(dev, staging_buffer_memory, nullptr);
+		}
+				
 		void create_cmd_buffers()
 		{
 			cmd_buffers.resize(sc_framebuffers.size());
@@ -1524,7 +1853,12 @@ namespace sandbox
 
 				vkCmdBindPipeline(cmd_buffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, graphics_pipeline);
 
-				vkCmdDraw(cmd_buffers[i], 3, 1, 0, 0);
+				VkBuffer vtx_buffers[] = { vertex_buffer };
+				VkDeviceSize offsets[] = { 0 };
+
+				vkCmdBindVertexBuffers(cmd_buffers[i], 0, 1, vtx_buffers, offsets);
+
+				vkCmdDraw(cmd_buffers[i], static_cast<uint32_t>(vertices.size()), 1, 0, 0);
 
 				vkCmdEndRenderPass(cmd_buffers[i]);
 
@@ -1576,6 +1910,10 @@ namespace sandbox
 			}
 
 			KHR::clean_swap_chain();
+
+			vkDestroyBuffer(dev, vertex_buffer, nullptr);
+			vkFreeMemory(dev, vtx_buffer_mem, nullptr);
+
 			vkDestroyCommandPool(dev, cmd_pool, nullptr);
 			vkDestroyDevice(dev, nullptr);
 
@@ -1611,6 +1949,7 @@ namespace sandbox
 		vulkan::create_graphics_pipeline();
 		vulkan::create_framebuffers();
 		vulkan::create_cmd_pool();
+		vulkan::create_vertex_buffer();
 		vulkan::create_cmd_buffers();
 		vulkan::create_syncs();
 	}
