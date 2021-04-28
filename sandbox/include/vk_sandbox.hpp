@@ -5,7 +5,9 @@
 #include <GLFW/glfw3native.h>
 
 #include <glm.hpp>
+#include <../glm/gtc/matrix_transform.hpp> // cmake bug to fix
 
+#include <chrono>
 #include <stdexcept>
 #include <cstdlib>
 #include <iostream>
@@ -60,6 +62,8 @@ namespace sandbox
 
 		namespace KHR
 		{
+			extern std::chrono::steady_clock::time_point start_time;
+
 			struct swap_chain_support
 			{
 				VkSurfaceCapabilitiesKHR			capabilities;
@@ -82,6 +86,8 @@ namespace sandbox
 			void clean_swap_chain();
 
 			void recreate_swap_chain();
+
+			void update_ubo(uint32_t curr_img);
 
 			void draw_frame();
 		}
@@ -165,6 +171,8 @@ namespace sandbox
 
 		void create_render_pass();
 
+		void create_descriptor_set_layout();
+
 		void create_graphics_pipeline();
 
 		void create_framebuffers();
@@ -181,7 +189,11 @@ namespace sandbox
 
 		void create_index_buffer();
 
-		uint32_t find_memory_type(uint32_t type_filter, VkMemoryPropertyFlags props);
+		void create_uniform_buffers();
+
+		void create_descriptor_pool();
+
+		void create_descriptor_sets();
 
 		void create_cmd_buffers();
 
