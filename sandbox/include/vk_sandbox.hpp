@@ -171,6 +171,12 @@ namespace sandbox
 
 		void create_cmd_pool();
 
+		void create_buffer(VkDeviceSize size, VkBufferUsageFlags usage, 
+			VkMemoryPropertyFlags props,
+			VkBuffer &buffer, VkDeviceMemory &dev_mem);
+
+		void copy_buffer(VkBuffer src, VkBuffer dst, VkDeviceSize size);
+
 		void create_vertex_buffer();
 
 		uint32_t find_memory_type(uint32_t type_filter, VkMemoryPropertyFlags props);
