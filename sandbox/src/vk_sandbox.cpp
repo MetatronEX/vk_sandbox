@@ -2609,7 +2609,10 @@ throw std::runtime_error("Texture image loading failed!");
 				//vkCmdDraw(cmd_buffers[i], static_cast<uint32_t>(vertices.size()), 1, 0, 0);
 				vkCmdDrawIndexed(cmd_buffers[i], static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
 
-				vkCmdEndRenderPass(cmd_buffers[i]);
+				VkSubpassEndInfo spe{};
+				spe.sType = VK_STRUCTURE_TYPE_SUBPASS_END_INFO;
+
+				vkCmdEndRenderPass2(cmd_buffers[i], &spe);
 
 				if (!OP_SUCCESS(vkEndCommandBuffer(cmd_buffers[i])))
 				{
