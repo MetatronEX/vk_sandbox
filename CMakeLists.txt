@@ -53,4 +53,6 @@ set(GLFW_LIB_DIR ${CMAKE_SOURCE_DIR}/external/install/lib-vc2019)
 
 set(STB_INC_DIR ${CMAKE_SOURCE_DIR}/external/stb)
 
+set(TINYOBJ_INC ${CMAKE_SOURCE_DIR}/external/tinyobjloader)
+
 add_subdirectory(sandbox)
