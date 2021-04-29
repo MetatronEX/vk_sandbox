@@ -53,15 +53,21 @@ namespace sandbox
 
 		const std::vector<vertex> vertices =
 		{
-			{{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
-			{{ 0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
-			{{ 0.5f,  0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
-			{{-0.5f,  0.5f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}}
+			{{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+			{{ 0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
+			{{ 0.5f,  0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
+			{{-0.5f,  0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}},
+
+			{{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
+			{{ 0.5f, -0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
+			{{ 0.5f,  0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
+			{{-0.5f,  0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}}
 		};
 
 		const std::vector<uint16_t> indices =
 		{
-			0, 1, 2, 2, 3, 0
+			0, 1, 2, 2, 3, 0,
+			4, 5, 6, 6, 7, 4
 		};
 
 		struct UniformBufferObject
@@ -101,6 +107,10 @@ namespace sandbox
 		VkDeviceMemory					tex_img_mem;
 		VkImageView						tex_img_view;
 		VkSampler						tex_sampler;
+
+		VkImage							depth_buffer;
+		VkDeviceMemory					depth_img_mem;
+		VkImageView						depth_img_view;
 
 		VkDescriptorPool				descriptor_pool;
 
@@ -419,6 +429,10 @@ namespace sandbox
 			*/
 			void clean_swap_chain()
 			{
+				vkDestroyImageView(dev, depth_img_view, nullptr);
+				vkDestroyImage(dev, depth_buffer, nullptr);
+				vkFreeMemory(dev, depth_img_mem, nullptr);
+
 				for (auto fb : sc_framebuffers)
 				{
 					vkDestroyFramebuffer(dev, fb, nullptr);
@@ -468,6 +482,7 @@ namespace sandbox
 				create_image_views();
 				create_render_pass();
 				create_graphics_pipeline();
+				create_depth_resources();
 				create_framebuffers();
 				create_uniform_buffers();
 				create_descriptor_pool();
@@ -949,7 +964,7 @@ namespace sandbox
 			*/
 		}
 
-		VkImageView create_img_view(VkImage img, VkFormat fmt)
+		VkImageView create_img_view(VkImage img, VkFormat fmt, VkImageAspectFlags aspectFlags)
 		{
 			VkImageViewCreateInfo iv_info{};
 			iv_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -982,7 +997,7 @@ namespace sandbox
 				chain with multiple layers. You could then create multiple image views for each image
 				representing the views for the left and right eyes by accessing different layers.
 			*/
-			iv_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			iv_info.subresourceRange.aspectMask = aspectFlags;
 			iv_info.subresourceRange.baseMipLevel = 0;
 			iv_info.subresourceRange.levelCount = 1;
 			iv_info.subresourceRange.baseArrayLayer = 0;
@@ -1011,7 +1026,7 @@ namespace sandbox
 
 			for (size_t i = 0; i < sc_images.size(); i++)
 			{
-				sc_image_views[i] = create_img_view(sc_images[i], sc_img_fmt);
+				sc_image_views[i] = create_img_view(sc_images[i], sc_img_fmt, VK_IMAGE_ASPECT_COLOR_BIT);
 			}
 		}
 
@@ -1087,7 +1102,18 @@ namespace sandbox
 			color_attachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 			color_attachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 			
-			VkAttachmentReference2 ca_ref{};
+			VkAttachmentDescription2 depth_attachment{};
+			depth_attachment.sType = VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_2;
+			depth_attachment.format = find_depth_format();
+			depth_attachment.samples = VK_SAMPLE_COUNT_1_BIT;
+			depth_attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+			depth_attachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+			depth_attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+			depth_attachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+			depth_attachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+			depth_attachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+			VkAttachmentReference2 ca_ref{}; // color
 			ca_ref.sType = VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2;
 			/*
 			The attachment parameter specifies which attachment to reference by its index in the attachment descriptions array. 
@@ -1099,10 +1125,15 @@ namespace sandbox
 			ca_ref.attachment = 0;
 			ca_ref.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 			
+			VkAttachmentReference2 da_ref{}; // depth
+			da_ref.sType = VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2;
+			da_ref.attachment = 1;
+			da_ref.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
 			/*
 			Vulkan may also support compute subpasses in the future, so we have to be explicit about this being a graphics subpass.
 			*/
-			VkSubpassDescription2 sp{};
+			VkSubpassDescription2 sp{}; 
 			sp.sType = VK_STRUCTURE_TYPE_SUBPASS_DESCRIPTION_2;
 			sp.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
 			/*
@@ -1119,6 +1150,7 @@ namespace sandbox
 			*/
 			sp.colorAttachmentCount = 1;
 			sp.pColorAttachments = &ca_ref;
+			sp.pDepthStencilAttachment = &da_ref;
 
 			/*
 			* There are two built-in dependencies that take care of the transition at the start of the
@@ -1145,24 +1177,28 @@ namespace sandbox
 			to wait for the swap chain to finish reading from the image before we can access it. This can be accomplished by 
 			waiting on the color attachment output stage itself.
 			*/
-			spd.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+			spd.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+				VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
 			spd.srcAccessMask = 0;
 			/*
 			* The operations that should wait on this are in the color attachment stage and involve the writing of the color 
 			attachment. These settings will prevent the transition from happening until it's actually necessary (and allowed): 
 			when we want to start writing colors to it.
 			*/
-			spd.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-			spd.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+			spd.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+				VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+			spd.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | 
+				VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
 
+			std::array<VkAttachmentDescription2, 2> attachments = { color_attachment,depth_attachment };
 			/*
 			The render pass object can then be created by filling in the VkRenderPassCreateInfo structure with an array of attachments 
 			and subpasses. The VkAttachmentReference objects reference attachments using the indices of this array.
 			*/
 			VkRenderPassCreateInfo2 rp_info{};
 			rp_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO_2;
-			rp_info.attachmentCount = 1;
-			rp_info.pAttachments = &color_attachment;
+			rp_info.attachmentCount = static_cast<uint32_t>(attachments.size());
+			rp_info.pAttachments = attachments.data();
 			rp_info.subpassCount = 1;
 			rp_info.pSubpasses = &sp;
 			rp_info.dependencyCount = 1;
@@ -1380,7 +1416,19 @@ namespace sandbox
 			ms_info.alphaToCoverageEnable = VK_FALSE;
 			ms_info.alphaToOneEnable = VK_FALSE;
 
-			// depth stencil to come
+			// depth stencil
+			// See: https://vulkan-tutorial.com/en/Depth_buffering for more info
+			VkPipelineDepthStencilStateCreateInfo ds_info{};
+			ds_info.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+			ds_info.depthTestEnable = VK_TRUE;
+			ds_info.depthWriteEnable = VK_TRUE;
+			ds_info.depthCompareOp = VK_COMPARE_OP_LESS;
+			ds_info.depthBoundsTestEnable = VK_FALSE;
+			ds_info.minDepthBounds = 0.f;
+			ds_info.maxDepthBounds = 1.f;
+			ds_info.stencilTestEnable = VK_FALSE;
+			ds_info.front = {};
+			ds_info.back = {};
 
 			// color blending
 			/*
@@ -1491,8 +1539,6 @@ namespace sandbox
 			pll_info.pushConstantRangeCount = 0;
 			pll_info.pPushConstantRanges = nullptr;
 			
-			
-
 			if (!OP_SUCCESS(vkCreatePipelineLayout(dev, &pll_info, nullptr, &pipeline_layout)))
 			{
 				throw std::runtime_error("Failed to create pipeline layout!");
@@ -1509,7 +1555,7 @@ namespace sandbox
 			pl_info.pViewportState = &vp_state;
 			pl_info.pRasterizationState = &raster_info;
 			pl_info.pMultisampleState = &ms_info;
-			pl_info.pDepthStencilState = nullptr;
+			pl_info.pDepthStencilState = &ds_info;
 			pl_info.pColorBlendState = &color_blend;
 			pl_info.pDynamicState = nullptr;
 			// pipeline layout
@@ -1547,9 +1593,10 @@ namespace sandbox
 
 			for (size_t i = 0; i < sc_image_views.size(); i++)
 			{
-				VkImageView attachments[] =
+				std::array<VkImageView, 2> attachments =
 				{
-					sc_image_views[i]
+					sc_image_views[i],
+					depth_img_view
 				};
 
 				VkFramebufferCreateInfo fb_info{};
@@ -1564,8 +1611,8 @@ namespace sandbox
 				The attachmentCount and pAttachments parameters specify the VkImageView objects that should be bound to the 
 				respective attachment descriptions in the render pass pAttachment array.
 				*/
-				fb_info.attachmentCount = 1;
-				fb_info.pAttachments = attachments;
+				fb_info.attachmentCount = static_cast<uint32_t>(attachments.size());
+				fb_info.pAttachments = attachments.data();
 				fb_info.width = sc_extent.width;
 				fb_info.height = sc_extent.height;
 				fb_info.layers = 1;
@@ -1608,6 +1655,58 @@ namespace sandbox
 			}
 		}
 
+		VkFormat find_supported_format(const std::vector<VkFormat>& candidates, 
+			VkImageTiling tiling, VkFormatFeatureFlags feats)
+		{
+			for (auto fmt : candidates)
+			{
+				VkFormatProperties2 f_props{};
+				f_props.sType = VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_2;
+				vkGetPhysicalDeviceFormatProperties2(pd, fmt, &f_props);
+
+				if (VK_IMAGE_TILING_LINEAR == tiling &&
+					(f_props.formatProperties.linearTilingFeatures & feats) == feats)
+				{
+					return fmt;
+				}
+				else if(VK_IMAGE_TILING_OPTIMAL == tiling &&
+					(f_props.formatProperties.optimalTilingFeatures & feats) == feats)
+				{
+					return fmt;
+				}
+			}
+
+			throw std::runtime_error("No supported format found!");
+		}
+
+		VkFormat find_depth_format()
+		{
+			return find_supported_format(
+				{ VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT },
+				VK_IMAGE_TILING_OPTIMAL,
+				VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT
+			);
+		}
+
+		bool has_stencil(VkFormat fmt)
+		{
+			return (fmt == VK_FORMAT_D32_SFLOAT_S8_UINT) || (fmt == VK_FORMAT_D24_UNORM_S8_UINT);
+		}
+
+		void create_depth_resources()
+		{
+			VkFormat depth_fmt = find_depth_format();
+
+			create_image(sc_extent.width, sc_extent.height, depth_fmt, VK_IMAGE_TILING_OPTIMAL,
+				VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+				depth_buffer, depth_img_mem);
+
+			depth_img_view = create_img_view(depth_buffer, depth_fmt, VK_IMAGE_ASPECT_DEPTH_BIT);
+
+			transition_image_layout(depth_buffer, depth_fmt, VK_IMAGE_LAYOUT_UNDEFINED, 
+				VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+		}
+		
 		/*
 		* Graphics cards can offer different types of memory to allocate from. Each type of memory varies in
 		terms of allowed operations and performance characteristics. We need to combine the requirements of
@@ -1666,7 +1765,7 @@ namespace sandbox
 			img_info.samples = VK_SAMPLE_COUNT_1_BIT;
 			img_info.flags = 0;
 
-			if (!OP_SUCCESS(vkCreateImage(dev, &img_info, nullptr, &texture_image)))
+			if (!OP_SUCCESS(vkCreateImage(dev, &img_info, nullptr, &img)))
 			{
 				throw std::runtime_error("Image creation failed!");
 			}
@@ -1786,7 +1885,7 @@ throw std::runtime_error("Texture image loading failed!");
 
 		void create_tex_img_view()
 		{
-			tex_img_view = create_img_view(texture_image, VK_FORMAT_R8G8B8A8_SRGB);
+			tex_img_view = create_img_view(texture_image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT);
 		}
 
 		/*
@@ -1859,7 +1958,21 @@ throw std::runtime_error("Texture image loading failed!");
 			img_barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 
 			img_barrier.image = img;
-			img_barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+
+			if (VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL == new_layout)
+			{
+				img_barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+
+				if (has_stencil(fmt))
+				{
+					img_barrier.subresourceRange.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
+				}
+			}
+			else
+			{
+				img_barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			}
+
 			img_barrier.subresourceRange.baseMipLevel = 0;
 			img_barrier.subresourceRange.levelCount = 1;
 			img_barrier.subresourceRange.baseArrayLayer = 0;
@@ -1887,6 +2000,16 @@ throw std::runtime_error("Texture image loading failed!");
 				img_barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
 				src_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
 				dst_stage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+			}
+			else if (VK_IMAGE_LAYOUT_UNDEFINED == old_layout && 
+				VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL == new_layout)
+			{
+				img_barrier.srcAccessMask = 0;
+				img_barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
+					VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+
+				src_stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+				dst_stage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
 			}
 			else
 			{
@@ -2413,6 +2536,10 @@ throw std::runtime_error("Texture image loading failed!");
 					throw std::runtime_error("Command buffer recording failed!");
 				}
 
+				std::array<VkClearValue, 2> clear_values{};
+				clear_values[0].color = { 0.f, 0.f, 0.f, 1.f };
+				clear_values[1].depthStencil = { 1.f, 0 };
+
 				/* Note: If the command buffer was already recorded once, then a call to vkBeginCommandBuffer will implicitly reset it. 
 				 It's not possible to append commands to a buffer at a later time. */
 
@@ -2435,9 +2562,9 @@ throw std::runtime_error("Texture image loading failed!");
 				The last two parameters define the clear values to use for VK_ATTACHMENT_LOAD_OP_CLEAR, which we used as load operation 
 				for the color attachment.
 				*/
-				VkClearValue clear_color = { 0.f,0.f,0.f,1.f };
-				rpi.clearValueCount = 1;
-				rpi.pClearValues = &clear_color;
+				
+				rpi.clearValueCount = static_cast<uint32_t>(clear_values.size());
+				rpi.pClearValues = clear_values.data();
 
 				VkSubpassBeginInfo spi{};
 				spi.sType = VK_STRUCTURE_TYPE_SUBPASS_BEGIN_INFO;
@@ -2584,8 +2711,9 @@ throw std::runtime_error("Texture image loading failed!");
 		vulkan::create_render_pass();
 		vulkan::create_descriptor_set_layout();
 		vulkan::create_graphics_pipeline();
-		vulkan::create_framebuffers();
 		vulkan::create_cmd_pool();
+		vulkan::create_depth_resources();
+		vulkan::create_framebuffers(); // must come after depth resources
 		vulkan::create_texture_image();
 		vulkan::create_tex_img_view();
 		vulkan::create_tex_sampler();

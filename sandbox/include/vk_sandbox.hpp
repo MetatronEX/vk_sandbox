@@ -108,7 +108,7 @@ namespace sandbox
 
 		struct vertex
 		{
-			glm::vec2 position;
+			glm::vec3 position;
 			glm::vec3 color;
 			glm::vec2 tex_coord;
 
@@ -145,7 +145,7 @@ namespace sandbox
 
 				attr_desc[0].binding = 0;
 				attr_desc[0].location = 0;
-				attr_desc[0].format = VK_FORMAT_R32G32_SFLOAT;
+				attr_desc[0].format = VK_FORMAT_R32G32B32_SFLOAT;
 				attr_desc[0].offset = offsetof(vertex, position);
 
 				attr_desc[1].binding = 0;
@@ -174,7 +174,7 @@ namespace sandbox
 
 		void create_logical_device();
 
-		VkImageView create_img_view(VkImage img, VkFormat fmt);
+		VkImageView create_img_view(VkImage img, VkFormat fmt, VkImageAspectFlags aspectFlags);
 
 		void create_image_views();
 
@@ -190,6 +190,13 @@ namespace sandbox
 
 		void create_cmd_pool();
 
+		VkFormat find_supported_format(const std::vector<VkFormat>& candidates,
+			VkImageTiling tiling, VkFormatFeatureFlags feats);
+
+		VkFormat find_depth_format();
+
+		bool has_stencil(VkFormat fmt);
+
 		uint32_t find_mem_type(uint32_t type_filter, VkMemoryPropertyFlags props);
 
 		void create_image(uint32_t tex_w, uint32_t tex_h, VkFormat fmt, VkImageTiling tiling,
@@ -198,6 +205,8 @@ namespace sandbox
 		VkCommandBuffer begin_single_time_cmds();
 
 		void end_single_time_cmds(VkCommandBuffer cmd_buffer);
+
+		void create_depth_resources();
 
 		void create_texture_image();
 
