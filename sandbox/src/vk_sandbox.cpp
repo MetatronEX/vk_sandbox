@@ -53,10 +53,10 @@ namespace sandbox
 
 		const std::vector<vertex> vertices =
 		{
-			{{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
-			{{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
-			{{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
-			{{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}}
+			{{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+			{{ 0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
+			{{ 0.5f,  0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
+			{{-0.5f,  0.5f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}}
 		};
 
 		const std::vector<uint16_t> indices =
@@ -99,6 +99,8 @@ namespace sandbox
 
 		VkImage							texture_image;
 		VkDeviceMemory					tex_img_mem;
+		VkImageView						tex_img_view;
+		VkSampler						tex_sampler;
 
 		VkDescriptorPool				descriptor_pool;
 
@@ -486,7 +488,7 @@ namespace sandbox
 				UniformBufferObject ubo{};
 				ubo.model = glm::rotate(glm::mat4(1.f), time * glm::radians(90.f), glm::vec3(0.f, 0.f, 1.f));
 				ubo.view  = glm::lookAt(glm::vec3(2.f, 2.f, 2.f), glm::vec3(0.f, 0.f, 0.f), glm::vec3(0.f, 0.f, 1.f));
-				ubo.proj = glm::perspective(glm::radians(90.f), 
+				ubo.proj = glm::perspective(glm::radians(70.f), 
 					static_cast<float>(sc_extent.width) / static_cast<float>(sc_extent.height), 0.1f, 10.f);
 				/*
 				GLM was originally designed for OpenGL, where the Y coordinate of the clip coordinates is inverted. The easiest way 
@@ -810,10 +812,11 @@ namespace sandbox
 				sw_adequate = !sw_support.formats.empty() && !sw_support.present_modes.empty();
 			}
 
-			return dev_props.properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU &&
+			return  dev_props.properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU &&
 					dev_feats.features.tessellationShader && 
 					indices.is_complete() && 
 					extensions_supported && 
+					dev_feats.features.samplerAnisotropy &&
 					sw_adequate;
 		};
 
@@ -898,6 +901,8 @@ namespace sandbox
 				dev_info.enabledLayerCount = 0;
 			}
 
+			dev_feats.features.samplerAnisotropy = VK_TRUE;
+
 			if (!OP_SUCCESS(vkCreateDevice(pd, &dev_info, nullptr, &dev)))
 			{
 				throw std::runtime_error("Failed to create a logical device!");
@@ -944,58 +949,69 @@ namespace sandbox
 			*/
 		}
 
+		VkImageView create_img_view(VkImage img, VkFormat fmt)
+		{
+			VkImageViewCreateInfo iv_info{};
+			iv_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+			iv_info.image = img;
+			/*
+				The viewType and format fields specify how the image data should be interpreted.
+				The viewType parameter allows you to treat images as 1D textures, 2D textures,
+				3D textures and cube maps.
+			*/
+			iv_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
+			iv_info.format = fmt;
+			/*
+				The components field allows you to swizzle the color channels around. For example,
+				you can map all of the channels to the red channel for a monochrome texture. You can
+				also map constant values of 0 and 1 to a channel.
+
+				iv_info.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+				iv_info.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+				iv_info.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+				iv_info.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+
+				//TODO: add another input argument to handle components
+
+			*/
+			/*
+				The subresourceRange field describes what the image's purpose is and which part of
+				the image should be accessed.
+
+				If you were working on a stereographic 3D application, then you would create a swap
+				chain with multiple layers. You could then create multiple image views for each image
+				representing the views for the left and right eyes by accessing different layers.
+			*/
+			iv_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			iv_info.subresourceRange.baseMipLevel = 0;
+			iv_info.subresourceRange.levelCount = 1;
+			iv_info.subresourceRange.baseArrayLayer = 0;
+			iv_info.subresourceRange.layerCount = 1;
+
+			VkImageView iv;
+			/*
+				* Unlike images, the image views were explicitly created by us, so we need to add a
+				similar loop to destroy them again at the end of the program
+			*/
+			if (!OP_SUCCESS(vkCreateImageView(dev, &iv_info, nullptr, &iv)))
+			{
+				throw std::runtime_error("Texture image view creation failed!");
+			}
+			/*
+				* An image view is sufficient to start using an image as a texture, but it's not quite
+				ready to be used as a render target just yet. That requires one more step of indirection,
+				known as a framebuffer.
+			*/
+			return iv;
+		}
+
 		void create_image_views()
 		{
 			sc_image_views.resize(sc_images.size());
 
 			for (size_t i = 0; i < sc_images.size(); i++)
 			{
-				VkImageViewCreateInfo create_info{};
-				create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-				create_info.image = sc_images[i];
-				/*
-				The viewType and format fields specify how the image data should be interpreted. 
-				The viewType parameter allows you to treat images as 1D textures, 2D textures, 
-				3D textures and cube maps.
-				*/
-				create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
-				create_info.format = sc_img_fmt;
-				/*
-				The components field allows you to swizzle the color channels around. For example, 
-				you can map all of the channels to the red channel for a monochrome texture. You can 
-				also map constant values of 0 and 1 to a channel.
-				*/
-				create_info.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
-				create_info.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
-				create_info.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
-				create_info.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
-				/*
-				The subresourceRange field describes what the image's purpose is and which part of 
-				the image should be accessed. 
-
-				If you were working on a stereographic 3D application, then you would create a swap 
-				chain with multiple layers. You could then create multiple image views for each image 
-				representing the views for the left and right eyes by accessing different layers.
-				*/
-				create_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-				create_info.subresourceRange.baseMipLevel = 0;
-				create_info.subresourceRange.levelCount = 1;
-				create_info.subresourceRange.baseArrayLayer = 0;
-				create_info.subresourceRange.layerCount = 1;
-
-				/*
-				* Unlike images, the image views were explicitly created by us, so we need to add a 
-				similar loop to destroy them again at the end of the program
-				*/
-				if (!OP_SUCCESS(vkCreateImageView(dev, &create_info, nullptr, &sc_image_views[i])))
-				{
-					throw std::runtime_error("Failed to createimage views!");
-				}
-				/*
-				* An image view is sufficient to start using an image as a texture, but it's not quite
-				ready to be used as a render target just yet. That requires one more step of indirection,
-				known as a framebuffer. 
-				*/
+				sc_image_views[i] = create_img_view(sc_images[i], sc_img_fmt);
 			}
 		}
 
@@ -1177,11 +1193,21 @@ namespace sandbox
 			*/
 			ubo_layout_bind.pImmutableSamplers = nullptr;
 
+			// sampler	
+			VkDescriptorSetLayoutBinding sam_layout_bind{};
+			sam_layout_bind.binding = 1;
+			sam_layout_bind.descriptorCount = 1;
+			sam_layout_bind.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+			sam_layout_bind.pImmutableSamplers = nullptr;
+			sam_layout_bind.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+			std::array<VkDescriptorSetLayoutBinding, 2> bindings = { ubo_layout_bind, sam_layout_bind };
+
 			// Note: All of the descriptor bindings are combined into a single VkDescriptorSetLayout object.
 			VkDescriptorSetLayoutCreateInfo dsl_info{};
 			dsl_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-			dsl_info.bindingCount = 1;
-			dsl_info.pBindings = &ubo_layout_bind;
+			dsl_info.bindingCount = static_cast<uint32_t>(bindings.size());
+			dsl_info.pBindings = bindings.data();
 
 			if (!OP_SUCCESS(vkCreateDescriptorSetLayout(dev, &dsl_info, nullptr, &descriptor_set_layout)))
 			{
@@ -1758,6 +1784,56 @@ throw std::runtime_error("Texture image loading failed!");
 			vkFreeMemory(dev, staging_buffer_mem, nullptr);
 		}
 
+		void create_tex_img_view()
+		{
+			tex_img_view = create_img_view(texture_image, VK_FORMAT_R8G8B8A8_SRGB);
+		}
+
+		/*
+		Note: 
+
+		Read this entire page to get the full gist of image view and sampler
+
+		See: https://vulkan-tutorial.com/Texture_mapping/Image_view_and_sampler
+		*/
+		void create_tex_sampler()
+		{
+			VkPhysicalDeviceProperties2 pd_props{};
+			pd_props.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+			
+			vkGetPhysicalDeviceProperties2(pd, &pd_props);
+
+			VkSamplerCreateInfo sam_info{};
+			sam_info.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+			sam_info.magFilter = VK_FILTER_LINEAR;
+			sam_info.minFilter = VK_FILTER_LINEAR;
+			sam_info.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+			sam_info.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+			sam_info.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+			/*
+				Instead of enforcing the availability of anisotropic filtering, it's also possible to 
+				simply not use it by conditionally setting:
+
+				sam_info.anisotropyEnable = VK_FALSE;
+				sam_info.maxAnisotropy = 1.f;
+			*/
+			sam_info.anisotropyEnable = VK_TRUE;
+			sam_info.maxAnisotropy = pd_props.properties.limits.maxSamplerAnisotropy;
+			sam_info.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+			sam_info.unnormalizedCoordinates = VK_FALSE;
+			sam_info.compareEnable = VK_FALSE;
+			sam_info.compareOp = VK_COMPARE_OP_ALWAYS;
+			sam_info.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+			sam_info.mipLodBias = 0.f;
+			sam_info.minLod = 0.f;
+			sam_info.maxLod = 0.f;
+
+			if (!OP_SUCCESS(vkCreateSampler(dev, &sam_info, nullptr, &tex_sampler)))
+			{
+				throw std::runtime_error("Texture sampler creation failed!");
+			}
+		}
+
 		/*
 		If we were still using buffers, then we could now write a function to record and execute vkCmdCopyBufferToImage
 		to finish the job, but this command requires the image to be in the right layout first.
@@ -2147,9 +2223,11 @@ throw std::runtime_error("Texture image loading failed!");
 			describe which descriptor types our descriptor sets are going to contain and how many of them, 
 			using VkDescriptorPoolSize structures.
 			*/
-			VkDescriptorPoolSize pool_size{};
-			pool_size.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-			pool_size.descriptorCount = static_cast<uint32_t>(sc_images.size());
+			std::array<VkDescriptorPoolSize, 2> pool_sizes{};
+			pool_sizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+			pool_sizes[0].descriptorCount = static_cast<uint32_t>(sc_images.size());
+			pool_sizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+			pool_sizes[1].descriptorCount = static_cast<uint32_t>(sc_images.size());
 
 			/*
 			allocate one of these descriptors for every frame. This pool size structure is referenced 
@@ -2160,18 +2238,37 @@ throw std::runtime_error("Texture image loading failed!");
 			*/
 			VkDescriptorPoolCreateInfo pool_info{};
 			pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-			pool_info.poolSizeCount = 1;
-			pool_info.pPoolSizes = &pool_size;
+			pool_info.poolSizeCount = static_cast<uint32_t>(pool_sizes.size());
+			pool_info.pPoolSizes = pool_sizes.data();
 			/*
 			Aside from the maximum number of individual descriptors that are available, we also need to specify 
 			the maximum number of descriptor sets that may be allocated:
 			*/
 			pool_info.maxSets = static_cast<uint32_t>(sc_images.size());
 
+			
 			if (!OP_SUCCESS(vkCreateDescriptorPool(dev, &pool_info, nullptr, &descriptor_pool)))
 			{
 				throw std::runtime_error("Descriptor pool creation failed!");
 			}
+			/*
+			* Note:
+			* 
+			 Inadequate descriptor pools are a good example of a problem that the validation layers will not catch: As of
+			 Vulkan 1.1, vkAllocateDescriptorSets may fail with the error code VK_ERROR_POOL_OUT_OF_MEMORY if the pool is
+			 not sufficiently large, but the driver may also try to solve the problem internally. This means that sometimes
+			 (depending on hardware, pool size and allocation size) the driver will let us get away with an allocation that
+			 exceeds the limits of our descriptor pool. Other times, vkAllocateDescriptorSets will fail and return
+			 VK_ERROR_POOL_OUT_OF_MEMORY. This can be particularly frustrating if the allocation succeeds on some machines,
+			 but fails on others.
+
+			 Since Vulkan shifts the responsiblity for the allocation to the driver, it is no longer a strict requirement to 
+			 only allocate as many descriptors of a certain type (VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, etc.) as 
+			 specified by the corresponding descriptorCount members for the creation of the descriptor pool. However, it 
+			 remains best practise to do so, and in the future, VK_LAYER_KHRONOS_validation will warn about this type of 
+			 problem if you enable Best Practice Validation.
+			*/
+
 		}
 
 		void create_descriptor_sets()
@@ -2217,40 +2314,55 @@ throw std::runtime_error("Texture image loading failed!");
 				db_info.offset = 0;
 				db_info.range = sizeof(UniformBufferObject); // can use VK_WHOLE_SIZE
 
+				VkDescriptorImageInfo di_info{};
+				di_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+				di_info.imageView = tex_img_view;
+				di_info.sampler = tex_sampler;
+
 				/*
 				configuration of descriptors is updated using the vkUpdateDescriptorSets function, which takes an array of 
 				VkWriteDescriptorSet structs as parameter.
 				*/
-				VkWriteDescriptorSet ds_writes{};
-				ds_writes.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+				std::array<VkWriteDescriptorSet,2> ds_writes{};
+				ds_writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 				/*
 				The first two fields specify the descriptor set to update and the binding. We gave our uniform buffer binding index 0. 
 				Remember that descriptors can be arrays, so we also need to specify the first index in the array that we want to update. 
 				We're not using an array, so the index is simply 0.
 				*/
-				ds_writes.dstSet = descriptor_sets[i];
-				ds_writes.dstBinding = 0;
-				ds_writes.dstArrayElement = 0;
+				ds_writes[0].dstSet = descriptor_sets[i];
+				ds_writes[0].dstBinding = 0;
+				ds_writes[0].dstArrayElement = 0;
 				/*
 				need to specify the type of descriptor again. It's possible to update multiple descriptors at once in an array, starting at 
 				index dstArrayElement. The descriptorCount field specifies how many array elements you want to update.
 				*/
-				ds_writes.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-				ds_writes.descriptorCount = 1;
+				ds_writes[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+				ds_writes[0].descriptorCount = 1;
 				/*
 				The last field references an array with descriptorCount structs that actually configure the descriptors. It depends on the type 
 				of descriptor which one of the three you actually need to use. The pBufferInfo field is used for descriptors that refer to buffer 
 				data, pImageInfo is used for descriptors that refer to image data, and pTexelBufferView is used for descriptors that refer to 
 				buffer views. Our descriptor is based on buffers, so we're using pBufferInfo.
 				*/
-				ds_writes.pBufferInfo = &db_info;
-				ds_writes.pImageInfo = nullptr;
-				ds_writes.pTexelBufferView = nullptr;
+				ds_writes[0].pBufferInfo = &db_info;
+				ds_writes[0].pImageInfo = nullptr;
+				ds_writes[0].pTexelBufferView = nullptr;
 				/*
 				The updates are applied using vkUpdateDescriptorSets. It accepts two kinds of arrays as parameters: an array of VkWriteDescriptorSet 
 				and an array of VkCopyDescriptorSet. The latter can be used to copy descriptors to each other, as its name implies.
 				*/
-				vkUpdateDescriptorSets(dev, 1, &ds_writes, 0, nullptr);
+
+				// image & sampler stuff
+				ds_writes[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+				ds_writes[1].dstSet = descriptor_sets[i];
+				ds_writes[1].dstBinding = 1;
+				ds_writes[1].dstArrayElement = 0;
+				ds_writes[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+				ds_writes[1].descriptorCount = 1;
+				ds_writes[1].pImageInfo = &di_info;
+
+				vkUpdateDescriptorSets(dev, static_cast<uint32_t>(ds_writes.size()), ds_writes.data(), 0, nullptr);
 			}
 		}
 
@@ -2420,6 +2532,10 @@ throw std::runtime_error("Texture image loading failed!");
 			}
 
 			KHR::clean_swap_chain();
+			
+			vkDestroySampler(dev, tex_sampler, nullptr);
+
+			vkDestroyImageView(dev, tex_img_view, nullptr);
 
 			vkDestroyImage(dev, texture_image, nullptr);
 			vkFreeMemory(dev, tex_img_mem, nullptr);
@@ -2471,6 +2587,8 @@ throw std::runtime_error("Texture image loading failed!");
 		vulkan::create_framebuffers();
 		vulkan::create_cmd_pool();
 		vulkan::create_texture_image();
+		vulkan::create_tex_img_view();
+		vulkan::create_tex_sampler();
 		vulkan::create_vertex_buffer();
 		vulkan::create_index_buffer();
 		vulkan::create_uniform_buffers();

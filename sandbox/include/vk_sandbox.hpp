@@ -110,6 +110,7 @@ namespace sandbox
 		{
 			glm::vec2 position;
 			glm::vec3 color;
+			glm::vec2 tex_coord;
 
 			static VkVertexInputBindingDescription get_binding_desc()
 			{
@@ -137,10 +138,10 @@ namespace sandbox
 				return bind_desc;
 			}
 
-			static std::array<VkVertexInputAttributeDescription, 2>
+			static std::array<VkVertexInputAttributeDescription, 3>
 				get_attr_desc()
 			{
-				std::array<VkVertexInputAttributeDescription, 2> attr_desc{};
+				std::array<VkVertexInputAttributeDescription, 3> attr_desc{};
 
 				attr_desc[0].binding = 0;
 				attr_desc[0].location = 0;
@@ -151,6 +152,11 @@ namespace sandbox
 				attr_desc[1].location = 1;
 				attr_desc[1].format = VK_FORMAT_R32G32B32_SFLOAT;
 				attr_desc[1].offset = offsetof(vertex, color);
+
+				attr_desc[2].binding = 0;
+				attr_desc[2].location = 2;
+				attr_desc[2].format = VK_FORMAT_R32G32_SFLOAT;
+				attr_desc[2].offset = offsetof(vertex, tex_coord);
 
 				return attr_desc;
 			}
@@ -167,6 +173,8 @@ namespace sandbox
 		void pick_physical_device();
 
 		void create_logical_device();
+
+		VkImageView create_img_view(VkImage img, VkFormat fmt);
 
 		void create_image_views();
 
@@ -192,6 +200,10 @@ namespace sandbox
 		void end_single_time_cmds(VkCommandBuffer cmd_buffer);
 
 		void create_texture_image();
+
+		void create_tex_img_view();
+
+		void create_tex_sampler();
 
 		void transition_image_layout(VkImage img, VkFormat fmt, VkImageLayout old_layout, VkImageLayout new_layout);
 
