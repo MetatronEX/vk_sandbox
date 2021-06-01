@@ -2192,8 +2192,7 @@ throw std::runtime_error("Texture image loading failed!");
 			VkMemoryAllocateInfo ma_info{};
 			ma_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 			ma_info.allocationSize = mem_req.memoryRequirements.size;
-			ma_info.memoryTypeIndex = find_mem_type(mem_req.memoryRequirements.memoryTypeBits,
-				VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+			ma_info.memoryTypeIndex = find_mem_type(mem_req.memoryRequirements.memoryTypeBits,props);
 
 			/*
 			It should be noted that in a real world application, you're not supposed to actually call vkAllocateMemory 
@@ -2286,7 +2285,7 @@ throw std::runtime_error("Texture image loading failed!");
 				We have to indicate that we intend to do that by specifying the transfer source flag for the stagingBuffer
 				and the transfer destination flag for the vertexBuffer, along with the vertex buffer usage flag.
 			*/
-			void* data;
+			void* data{ nullptr };
 			vkMapMemory(dev, staging_buffer_memory, 0, buffer_size, 0, &data);
 			memcpy(data, vertices.data(), static_cast<size_t>(buffer_size));
 			vkUnmapMemory(dev, staging_buffer_memory);
@@ -2311,8 +2310,8 @@ throw std::runtime_error("Texture image loading failed!");
 				VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
 				staging_buffer, staging_buffer_mem);
 
-			void* data;
-			vkMapMemory(dev, staging_buffer_mem, 0, buffer_size, 0, &data);
+			void* data = nullptr;
+			vkMapMemory(dev, staging_buffer_mem, 0, buffer_size , 0, &data);
 			memcpy(data, indices.data(), static_cast<size_t>(buffer_size));
 			vkUnmapMemory(dev, staging_buffer_mem);
 
