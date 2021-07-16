@@ -78,7 +78,7 @@ namespace sandbox
 		};
 
 		VkInstance						instance;
-		VkPhysicalDevice				pd{ VK_NULL_HANDLE };
+		VkPhysicalDevice				pd;
 		VkDevice						dev;
 		VkSurfaceKHR					surface;
 
@@ -1807,7 +1807,7 @@ namespace sandbox
 
 			if (!pixels)
 			{
-throw std::runtime_error("Texture image loading failed!");
+				throw std::runtime_error("Texture image loading failed!");
 			}
 
 			VkBuffer		staging_buffer;
@@ -2286,7 +2286,11 @@ throw std::runtime_error("Texture image loading failed!");
 				and the transfer destination flag for the vertexBuffer, along with the vertex buffer usage flag.
 			*/
 			void* data{ nullptr };
-			vkMapMemory(dev, staging_buffer_memory, 0, buffer_size, 0, &data);
+			if (!OP_SUCCESS(vkMapMemory(dev, staging_buffer_memory, 0, buffer_size, 0, &data)))
+			{
+				throw std::runtime_error("Memory mapping failed!");
+			}
+
 			memcpy(data, vertices.data(), static_cast<size_t>(buffer_size));
 			vkUnmapMemory(dev, staging_buffer_memory);
 
