@@ -108,8 +108,9 @@ namespace sandbox
 
 		struct vertex
 		{
-			glm::vec2 position;
+			glm::vec3 position;
 			glm::vec3 color;
+			glm::vec2 tex_coord;
 
 			static VkVertexInputBindingDescription get_binding_desc()
 			{
@@ -137,20 +138,25 @@ namespace sandbox
 				return bind_desc;
 			}
 
-			static std::array<VkVertexInputAttributeDescription, 2>
+			static std::array<VkVertexInputAttributeDescription, 3>
 				get_attr_desc()
 			{
-				std::array<VkVertexInputAttributeDescription, 2> attr_desc{};
+				std::array<VkVertexInputAttributeDescription, 3> attr_desc{};
 
 				attr_desc[0].binding = 0;
 				attr_desc[0].location = 0;
-				attr_desc[0].format = VK_FORMAT_R32G32_SFLOAT;
+				attr_desc[0].format = VK_FORMAT_R32G32B32_SFLOAT;
 				attr_desc[0].offset = offsetof(vertex, position);
 
 				attr_desc[1].binding = 0;
 				attr_desc[1].location = 1;
 				attr_desc[1].format = VK_FORMAT_R32G32B32_SFLOAT;
 				attr_desc[1].offset = offsetof(vertex, color);
+
+				attr_desc[2].binding = 0;
+				attr_desc[2].location = 2;
+				attr_desc[2].format = VK_FORMAT_R32G32_SFLOAT;
+				attr_desc[2].offset = offsetof(vertex, tex_coord);
 
 				return attr_desc;
 			}
@@ -168,6 +174,8 @@ namespace sandbox
 
 		void create_logical_device();
 
+		VkImageView create_img_view(VkImage img, VkFormat fmt, VkImageAspectFlags aspectFlags);
+
 		void create_image_views();
 
 		VkShaderModule create_shader_module(const std::vector<char>& spv);
@@ -181,6 +189,34 @@ namespace sandbox
 		void create_framebuffers();
 
 		void create_cmd_pool();
+
+		VkFormat find_supported_format(const std::vector<VkFormat>& candidates,
+			VkImageTiling tiling, VkFormatFeatureFlags feats);
+
+		VkFormat find_depth_format();
+
+		bool has_stencil(VkFormat fmt);
+
+		uint32_t find_mem_type(uint32_t type_filter, VkMemoryPropertyFlags props);
+
+		void create_image(uint32_t tex_w, uint32_t tex_h, VkFormat fmt, VkImageTiling tiling,
+			VkImageUsageFlags usage, VkMemoryPropertyFlags props, VkImage& img, VkDeviceMemory& img_mem);
+
+		VkCommandBuffer begin_single_time_cmds();
+
+		void end_single_time_cmds(VkCommandBuffer cmd_buffer);
+
+		void create_depth_resources();
+
+		void create_texture_image();
+
+		void create_tex_img_view();
+
+		void create_tex_sampler();
+
+		void transition_image_layout(VkImage img, VkFormat fmt, VkImageLayout old_layout, VkImageLayout new_layout);
+
+		void copy_buffer_to_img(VkBuffer buffer, VkImage img, uint32_t w, uint32_t h);
 
 		void create_buffer(VkDeviceSize size, VkBufferUsageFlags usage, 
 			VkMemoryPropertyFlags props,

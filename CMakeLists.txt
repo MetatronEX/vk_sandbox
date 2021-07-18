@@ -51,6 +51,8 @@ set(GLFW_INC_DIR ${GLFW_ROOT}/include)
 # get the precompiled lib for now
 set(GLFW_LIB_DIR ${CMAKE_SOURCE_DIR}/external/install/lib-vc2019)
 
-set(STM_INC_DIR ${CMAKE_SOURCE_DIR}/external/stb)
+set(STB_INC_DIR ${CMAKE_SOURCE_DIR}/external/stb)
+
+set(TINYOBJ_INC ${CMAKE_SOURCE_DIR}/external/tinyobjloader)
 
 add_subdirectory(sandbox)
