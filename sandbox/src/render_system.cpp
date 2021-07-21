@@ -841,7 +841,7 @@ namespace sandbox
 			return compute_pipeline;
 		}
 
-		VkFormat render_system::find_supported_format(const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags feats)
+		VkFormat render_system::find_supported_format(const std::vector<VkFormat>& candidates, const VkImageTiling tiling, const VkFormatFeatureFlags feats)
 		{
 			for (auto fmt : candidates)
 			{
@@ -878,6 +878,112 @@ namespace sandbox
 			return (fmt == VK_FORMAT_D32_SFLOAT_S8_UINT) || (fmt == VK_FORMAT_D24_UNORM_S8_UINT);
 		}
 
+		uint32_t render_system::find_memory_type(const uint32_t type_filter, const VkMemoryPropertyFlags props)
+		{
+			VkPhysicalDeviceMemoryProperties2 mem_props{};
+			mem_props.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PROPERTIES_2;
+
+			vkGetPhysicalDeviceMemoryProperties2(pd, &mem_props);
+
+			for (uint32_t i = 0; i < mem_props.memoryProperties.memoryTypeCount; i++)
+			{
+				if ((type_filter & (1 << i)) &&
+					(mem_props.memoryProperties.memoryTypes[i].propertyFlags & props) == props)
+					return i;
+			}
+
+			throw std::runtime_error("Suitable memory type not found!");
+		};
+
+		image render_system::create_image(const VkImageCreateInfo& img_info, const VkMemoryPropertyFlags props)
+		{
+			image I;
+
+			if (!OP_SUCCESS(vkCreateImage(dev, &img_info, alloc_callback, &I.I)))
+			{
+				throw std::runtime_error("Image creation failed!");
+			}
+
+			VkMemoryRequirements2 mem_reqs{};
+			mem_reqs.sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2;
+
+			VkImageMemoryRequirementsInfo2 img_reqs{};
+			img_reqs.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_REQUIREMENTS_INFO_2;
+			img_reqs.image = I.I;
+
+			vkGetImageMemoryRequirements2(dev, &img_reqs, &mem_reqs);
+
+			VkMemoryAllocateInfo ma_info{};
+			ma_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+			ma_info.allocationSize = mem_reqs.memoryRequirements.size;
+			ma_info.memoryTypeIndex = find_memory_type(mem_reqs.memoryRequirements.memoryTypeBits, props);
+
+			if (!OP_SUCCESS(vkAllocateMemory(dev, &ma_info, alloc_callback, &I.DM)))
+			{
+				throw std::runtime_error("Image memory allocation failed!");
+			}
+
+			return I;
+		}
+
+		void render_system::bind_images_memory(const std::vector<VkBindImageMemoryInfo>& bim_infos)
+		{
+			if (!OP_SUCCESS(vkBindImageMemory2(dev, bim_infos.size(), bim_infos.data())))
+			{
+				throw std::runtime_error("Images memory binding failed!");
+			}
+		}
+
+		buffer render_system::create_buffer(const VkBufferCreateInfo& b_info, const VkMemoryPropertyFlags props)
+		{
+			buffer B;
+
+			if (!OP_SUCCESS(vkCreateBuffer(dev, &b_info, alloc_callback, &B.B)))
+			{
+				throw std::runtime_error("Buffer creation failed!");
+			}
+
+			VkMemoryRequirements2 mem_req{};
+			mem_req.sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2;
+
+			VkBufferMemoryRequirementsInfo2 bmr_info{};
+			bmr_info.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_REQUIREMENTS_INFO_2;
+			bmr_info.buffer = B.B;
+
+			vkGetBufferMemoryRequirements2(dev, &bmr_info, &mem_req);
+
+			VkMemoryAllocateInfo ma_info{};
+			ma_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+			ma_info.allocationSize = mem_req.memoryRequirements.size;
+			ma_info.memoryTypeIndex = find_memory_type(mem_req.memoryRequirements.memoryTypeBits, props);
+
+			if (!OP_SUCCESS(vkAllocateMemory(dev, &ma_info, alloc_callback, &B.DM)))
+			{
+				throw std::runtime_error("vertex buffer memory allocation failed!");
+			}
+
+			return B;
+		}
+
+		void render_system::bind_buffers_memory(const std::vector<VkBindBufferMemoryInfo>& bbm_infos)
+		{
+			if (!OP_SUCCESS(vkBindBufferMemory2(dev, bbm_infos.size(), bbm_infos.data())))
+			{
+				throw std::runtime_error("Buffers memory binding failed!");
+			}
+		}
+
+		VkDescriptorPool render_system::create_descriptor_pool(const VkDescriptorPoolCreateInfo& pool_info)
+		{
+			VkDescriptorPool descriptor_pool;
+
+			if (!OP_SUCCESS(vkCreateDescriptorPool(dev, &pool_info, alloc_callback, &descriptor_pool)))
+			{
+				throw std::runtime_error("Descriptor pool creation failed!");
+			}
+
+			return descriptor_pool;
+		}
 	}
 	
 }

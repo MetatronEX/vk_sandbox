@@ -7,9 +7,6 @@
 #include <GLFW/glfw3.h>
 #define GLFW_EXPOSE_NATIVE_WIN32
 #include <GLFW/glfw3native.h>
-
-
-
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 
@@ -23,6 +20,9 @@
 #include <vector>
 #include <optional>
 #include <array>
+
+#include "image.hpp"
+#include "buffer.hpp"
 
 #define OP_SUCCESS(X) VK_SUCCESS == X
 
@@ -56,6 +56,10 @@ namespace sandbox
 
 			void create_image_views();
 
+			uint32_t find_memory_type(const uint32_t type_filter, const VkMemoryPropertyFlags props);
+
+			VkFormat find_supported_format(const std::vector<VkFormat>& candidates, const VkImageTiling tiling, const VkFormatFeatureFlags feats);
+
 		public:
 
 			GLFWwindow* window;
@@ -84,7 +88,7 @@ namespace sandbox
 			std::vector<VkFence>						in_flight_fences;
 			std::vector<VkFence>						images_in_flight;
 
-			VkAllocationCallbacks* alloc_callback{ nullptr };
+			VkAllocationCallbacks*						alloc_callback{ nullptr };
 
 			size_t										curr_frame{ 0 };
 
@@ -101,7 +105,7 @@ namespace sandbox
 			void pick_physical_device();
 			void create_logical_device();
 
-			VkFormat find_supported_format(const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags feats);
+			
 			VkFormat find_depth_format();
 			bool has_stencil(VkFormat fmt);
 			
@@ -113,6 +117,13 @@ namespace sandbox
 			VkCommandPool create_cmd_pool(const VkCommandPoolCreateInfo& pool_info);
 			VkPipeline create_graphics_pipeline(const std::vector<VkGraphicsPipelineCreateInfo>& pl_infos, const VkPipelineCache pl_cache = VK_NULL_HANDLE);
 			VkPipeline create_compute_pipeline(const std::vector<VkComputePipelineCreateInfo>& pl_infos, const VkPipelineCache pl_cache = VK_NULL_HANDLE);
+			VkDescriptorPool create_descriptor_pool(const VkDescriptorPoolCreateInfo& pool_info);
+
+			image create_image(const VkImageCreateInfo& img_info, const VkMemoryPropertyFlags props);
+			void bind_images_memory(const std::vector<VkBindImageMemoryInfo>& bim_infos);
+
+			buffer create_buffer(const VkBufferCreateInfo& b_info, const VkMemoryPropertyFlags props);
+			void bind_buffers_memory(const std::vector<VkBindBufferMemoryInfo>& bbm_infos);
 		};
 	}
 	
