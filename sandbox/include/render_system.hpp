@@ -28,73 +28,87 @@
 
 namespace sandbox
 {
-	class render_system
+	namespace vk
 	{
-		static constexpr unsigned max_frames_in_flight = 2;
-		bool fb_resized = false;
+		class render_system
+		{
 
-		std::chrono::steady_clock::time_point start_time;
+		private:
 
-		void create_surface();
+			static constexpr unsigned max_frames_in_flight = 2;
+			bool fb_resized = false;
 
-		VkSurfaceFormatKHR choose_swap_surface_fmt(const std::vector<VkSurfaceFormatKHR>& available_fmts);
+			std::chrono::steady_clock::time_point start_time;
 
-		VkPresentModeKHR choose_swap_present_mode(const std::vector<VkPresentModeKHR>& available_modes);
+			void create_surface();
 
-		VkExtent2D choose_swap_extent(const VkSurfaceCapabilitiesKHR& capabilities);
+			VkSurfaceFormatKHR choose_swap_surface_fmt(const std::vector<VkSurfaceFormatKHR>& available_fmts);
 
-		void create_swap_chain();
+			VkPresentModeKHR choose_swap_present_mode(const std::vector<VkPresentModeKHR>& available_modes);
 
-		void clean_swap_chain();
+			VkExtent2D choose_swap_extent(const VkSurfaceCapabilitiesKHR& capabilities);
 
-		void recreate_swap_chain();
+			void create_swap_chain();
 
-	public:
+			void clean_swap_chain();
 
-		GLFWwindow*									window;
-		VkInstance									instance;
-		VkPhysicalDevice							pd;
-		VkDevice									dev;
-		VkSurfaceKHR								surface;
-		VkSwapchainKHR								wap_chain;
+			void recreate_swap_chain();
 
-		VkFormat									sc_img_fmt;
-		VkExtent2D									sc_extent;
+			void create_image_views();
 
-		VkQueue										graphics_queue;
-		VkQueue										present_queue;
+		public:
 
-		VkSwapchainKHR								swap_chain;
+			GLFWwindow* window;
+			VkInstance									instance;
+			VkPhysicalDevice							pd;
+			VkDevice									dev;
+			VkSurfaceKHR								surface;
+			VkSwapchainKHR								wap_chain;
 
-		std::vector<VkImage>						sc_images;
-		std::vector<VkImageView>					sc_image_views;
+			VkFormat									sc_img_fmt;
+			VkExtent2D									sc_extent;
 
-		std::vector<VkCommandBuffer>				cmd_buffers;
+			VkQueue										compute_queue;
+			VkQueue										graphics_queue;
+			VkQueue										present_queue;
 
-		std::vector<VkSemaphore>					image_semaphores;
-		std::vector<VkSemaphore>					rp_semaphores;
-		std::vector<VkFence>						in_flight_fences;
-		std::vector<VkFence>						images_in_flight;
+			VkSwapchainKHR								swap_chain;
 
-		VkAllocationCallbacks*						alloc_callback	{ nullptr };
+			std::vector<VkImage>						sc_images;
+			std::vector<VkImageView>					sc_image_views;
 
-		size_t										curr_frame	{ 0 };
-		std::chrono::steady_clock::time_point		start_time;
+			std::vector<VkCommandBuffer>				cmd_buffers;
 
-		render_system() = default;
-		~render_system() = default;
-		render_system(const render_system&) = delete;
-		render_system(render_system&&) = delete;
-		render_system& operator= (const render_system&) = delete;
-		render_system& operator= (render_system&&) = delete;
+			std::vector<VkSemaphore>					image_semaphores;
+			std::vector<VkSemaphore>					rp_semaphores;
+			std::vector<VkFence>						in_flight_fences;
+			std::vector<VkFence>						images_in_flight;
 
-		void update_ubo(uint32_t curr_img);
-		void draw_frame();
+			VkAllocationCallbacks* alloc_callback{ nullptr };
 
-		void create_instance();
-		void pick_physical_device();
-		void create_logical_device();
-	};
+			size_t										curr_frame{ 0 };
+
+			render_system() = default;
+			~render_system() = default;
+			render_system(const render_system&) = delete;
+			render_system(render_system&&) = delete;
+			render_system& operator= (const render_system&) = delete;
+			render_system& operator= (render_system&&) = delete;
+
+			void update_ubo(uint32_t curr_img);
+			void draw_frame();
+
+			void create_instance();
+			void pick_physical_device();
+			void create_logical_device();
+
+			VkImageView create_img_view(VkImage img, VkFormat fmt, VkImageAspectFlags aspectFlags);
+			VkShaderModule create_shader_module(const std::vector<char>& spv, const VkShaderModuleCreateFlags flags = 0);
+			VkRenderPass create_render_pass(const VkRenderPassCreateInfo2& rp_info);
+			VkDescriptorSetLayout create_descriptor_set_layout(const VkDescriptorSetLayoutCreateInfo& dsl_info);
+		};
+	}
+	
 }
 
 #endif // !RENDER_SYSTEM_HPP
