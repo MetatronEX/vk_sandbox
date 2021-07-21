@@ -95,17 +95,24 @@ namespace sandbox
 			render_system& operator= (const render_system&) = delete;
 			render_system& operator= (render_system&&) = delete;
 
-			void update_ubo(uint32_t curr_img);
 			void draw_frame();
 
 			void create_instance();
 			void pick_physical_device();
 			void create_logical_device();
 
-			VkImageView create_img_view(VkImage img, VkFormat fmt, VkImageAspectFlags aspectFlags);
-			VkShaderModule create_shader_module(const std::vector<char>& spv, const VkShaderModuleCreateFlags flags = 0);
+			VkFormat find_supported_format(const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags feats);
+			VkFormat find_depth_format();
+			bool has_stencil(VkFormat fmt);
+			
+			VkImageView create_img_view(const VkImageViewCreateInfo& iv_info);
+			VkShaderModule create_shader_module(const VkShaderModuleCreateInfo& create_info);
 			VkRenderPass create_render_pass(const VkRenderPassCreateInfo2& rp_info);
 			VkDescriptorSetLayout create_descriptor_set_layout(const VkDescriptorSetLayoutCreateInfo& dsl_info);
+			VkFramebuffer create_framebuffers(const VkFramebufferCreateInfo& fb_info);
+			VkCommandPool create_cmd_pool(const VkCommandPoolCreateInfo& pool_info);
+			VkPipeline create_graphics_pipeline(const std::vector<VkGraphicsPipelineCreateInfo>& pl_infos, const VkPipelineCache pl_cache = VK_NULL_HANDLE);
+			VkPipeline create_compute_pipeline(const std::vector<VkComputePipelineCreateInfo>& pl_infos, const VkPipelineCache pl_cache = VK_NULL_HANDLE);
 		};
 	}
 	

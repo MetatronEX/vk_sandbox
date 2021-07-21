@@ -724,19 +724,8 @@ namespace sandbox
 			vkGetDeviceQueue2(dev, &devq_info, &present_queue);
 		}
 
-		VkImageView render_system::create_img_view(VkImage img, VkFormat fmt, VkImageAspectFlags aspectFlags)
+		VkImageView render_system::create_img_view(const VkImageViewCreateInfo& iv_info)
 		{
-			VkImageViewCreateInfo iv_info{};
-			iv_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-			iv_info.image = img;
-			iv_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
-			iv_info.format = fmt;
-			iv_info.subresourceRange.aspectMask = aspectFlags;
-			iv_info.subresourceRange.baseMipLevel = 0;
-			iv_info.subresourceRange.levelCount = 1;
-			iv_info.subresourceRange.baseArrayLayer = 0;
-			iv_info.subresourceRange.layerCount = 1;
-
 			VkImageView iv;
 
 			if (!OP_SUCCESS(vkCreateImageView(dev, &iv_info, alloc_callback, &iv)))
@@ -751,20 +740,25 @@ namespace sandbox
 		{
 			sc_image_views.resize(sc_images.size());
 
+			VkImageViewCreateInfo iv_info{};
+			iv_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+			iv_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
+			iv_info.format = sc_img_fmt;
+			iv_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			iv_info.subresourceRange.baseMipLevel = 0;
+			iv_info.subresourceRange.levelCount = 1;
+			iv_info.subresourceRange.baseArrayLayer = 0;
+			iv_info.subresourceRange.layerCount = 1;
+
 			for (size_t i = 0; i < sc_images.size(); i++)
 			{
-				sc_image_views[i] = create_img_view(sc_images[i], sc_img_fmt, VK_IMAGE_ASPECT_COLOR_BIT);
+				iv_info.image = sc_images[i];
+				sc_image_views[i] = create_img_view(iv_info);
 			}
 		}
 
-		VkShaderModule render_system::create_shader_module(const std::vector<char>& spv, const VkShaderModuleCreateFlags flags)
+		VkShaderModule render_system::create_shader_module(const VkShaderModuleCreateInfo& create_info)
 		{
-			VkShaderModuleCreateInfo create_info{};
-			create_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-			create_info.flags = flags;
-			create_info.codeSize = spv.size();
-			create_info.pCode = reinterpret_cast<const unsigned*>(spv.data());
-
 			VkShaderModule shader_module;
 
 			if (!OP_SUCCESS(vkCreateShaderModule(dev, &create_info, alloc_callback, &shader_module)))
@@ -798,6 +792,92 @@ namespace sandbox
 
 			return descriptor_set_layout;
 		}
+
+		VkFramebuffer render_system::create_framebuffers(const VkFramebufferCreateInfo& fb_info)
+		{
+			VkFramebuffer FB;
+
+			if (!OP_SUCCESS(vkCreateFramebuffer(dev, &fb_info, alloc_callback, &FB)))
+			{
+				throw std::runtime_error("Failed to create framebuffer!");
+			}
+
+			return FB;
+		}
+
+		VkCommandPool render_system::create_cmd_pool(const VkCommandPoolCreateInfo& pool_info)
+		{
+			VkCommandPool cmd_pool;
+
+			if (!OP_SUCCESS(vkCreateCommandPool(dev, &pool_info, alloc_callback, &cmd_pool)))
+			{
+				throw std::runtime_error("Failed to create command pool!");
+			}
+
+			return cmd_pool;
+		}
+
+		VkPipeline render_system::create_graphics_pipeline(const std::vector<VkGraphicsPipelineCreateInfo>& pl_infos, const VkPipelineCache pl_cache)
+		{
+			VkPipeline graphics_pipeline;
+
+			if (!OP_SUCCESS(vkCreateGraphicsPipelines(dev, pl_cache, pl_infos.size(), pl_infos.data(), alloc_callback, &graphics_pipeline)))
+			{
+				throw std::runtime_error("Failed to create graphics pipeline!");
+			}
+
+			return graphics_pipeline;
+		}
+
+		VkPipeline render_system::create_compute_pipeline(const std::vector<VkComputePipelineCreateInfo>& pl_infos, const VkPipelineCache pl_cache)
+		{
+			VkPipeline compute_pipeline;
+
+			if (!OP_SUCCESS(vkCreateComputePipelines(dev, pl_cache, pl_infos.size(), pl_infos.data(), alloc_callback, &compute_pipeline)))
+			{
+				throw std::runtime_error("Failed to create graphics pipeline!");
+			}
+
+			return compute_pipeline;
+		}
+
+		VkFormat render_system::find_supported_format(const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags feats)
+		{
+			for (auto fmt : candidates)
+			{
+				VkFormatProperties2 f_props{};
+				f_props.sType = VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_2;
+				vkGetPhysicalDeviceFormatProperties2(pd, fmt, &f_props);
+
+				if (VK_IMAGE_TILING_LINEAR == tiling &&
+					(f_props.formatProperties.linearTilingFeatures & feats) == feats)
+				{
+					return fmt;
+				}
+				else if (VK_IMAGE_TILING_OPTIMAL == tiling &&
+					(f_props.formatProperties.optimalTilingFeatures & feats) == feats)
+				{
+					return fmt;
+				}
+			}
+
+			throw std::runtime_error("No supported format found!");
+		}
+
+		VkFormat render_system::find_depth_format()
+		{
+			return find_supported_format(
+				{ VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT },
+				VK_IMAGE_TILING_OPTIMAL,
+				VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT
+			);
+		}
+
+		bool render_system::has_stencil(VkFormat fmt)
+		{
+			return (fmt == VK_FORMAT_D32_SFLOAT_S8_UINT) || (fmt == VK_FORMAT_D24_UNORM_S8_UINT);
+		}
+
 	}
 	
 }
