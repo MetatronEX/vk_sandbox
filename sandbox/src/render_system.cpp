@@ -94,12 +94,6 @@ namespace sandbox
 				}
 			}
 
-			/*
-				vkCreateDebugUtilsMessengerEXT call requires a valid instance to have been created and
-				vkDestroyDebugUtilsMessengerEXT must be called before the instance is destroyed. This
-				currently leaves us unable to debug any issues in the vkCreateInstance and vkDestroyInstance
-				calls.
-			*/
 			void populate_debug_msg_info(VkDebugUtilsMessengerCreateInfoEXT& debug_info)
 			{
 				debug_info = {};
