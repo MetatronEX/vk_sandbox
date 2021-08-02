@@ -36,6 +36,7 @@ namespace vk
 
         VKSubmitInfo                    submit_info;
 
+        logical_device                  logic_device;
         swap_chain                      swapchain;
         depth_stencil                   depthstencil;
         command_buffer                  commandbuffers;
