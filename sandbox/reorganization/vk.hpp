@@ -244,6 +244,17 @@ namespace vk
 
         return false;
     }
+
+    VkCommandPool create_commandpool(VkDevice device, const uint32_t queue_familiy_index, const VkCommandPoolCreateFlags flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT)
+    {
+        VkCommandPool CP;
+        VkCommandPoolCreateInfo CPC{}:
+        CPC.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+        CPC.queueFamilyIndex = queue_familiy_index;
+        CPC.flags = flags;
+        OP_SUCCESS(vkCreateCommandPool(device,&CPC,allocation_callbacks,&CP));
+        return CP;
+    }
 }
 
 #endif

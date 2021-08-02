@@ -7,6 +7,7 @@
 #include "vk_depthstencil.hpp"
 #include "vk_commandbuffer.hpp"
 #include "vk_fence.hpp"
+#include "vk_logicaldevice.hpp"
 
 #include <vector>
 
@@ -24,17 +25,24 @@ namespace vk
         VkRenderPass                    renderpass;
         VkCommandPool                   commandpool;
 
+        std::vector<VkFramebuffer>      framebuffers;
+
         VkSemaphore                     present_complete;
         VkSemaphore                     render_complete;
 
         VkFormat                        depth_format;
 
+        VkQueueFlags                    requested_queue_types;
+
+        VKSubmitInfo                    submit_info;
+
         swap_chain                      swapchain;
         depth_stencil                   depthstencil;
         command_buffer                  commandbuffers;
         
-        std::vector<VkFramebuffer>      framebuffers;
         std::vector<fence>              wait_fences;
+
+        void*                           features_chain {nullptr};
 
         const char*                     application_name;
         const char*                     engine_name;
@@ -51,12 +59,15 @@ namespace vk
         bool                            view_updated {false};
         bool                            resized {false};
         bool                            vsync {false};
+        bool                            headless_rendering {false};
 
-        std::vector<const char*>    supported_instance_extensions;
-        std::vector<const char*>    enabled_instance_extensions;
+        
+        std::vector<const char*>        enabled_instance_extensions;
+        std::vector<const char*>        enabled_device_extensions;
 
         void setup_instance(const bool enable_validation);
         void pick_physical_device();
+        void setup_logical_device();
 
         void setup_swap_chain();
         void setup_depth_stencil();

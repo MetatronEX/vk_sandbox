@@ -16,6 +16,8 @@ namespace vk
         uint32_t extensions_count = 0;
         vkEnumerateInstanceExtensionProperties(nullptr, &extensions_count, nullptr);
 
+        std::vector<const char*> supported_instance_extensions;
+
         if (extensions_count > 0)
         {
             std::vector<VkExtensionProperties> extensions(extensions_count);
@@ -32,9 +34,8 @@ namespace vk
             {
                 if(std::find(supported_instance_extensions.begin(), supported_instance_extensions.end(), ee) == 
                 supported_instance_extensions.end())
-                {
                     std::err << "Enabled instance extension \"" << ee << "\" is not present at instance level\n";
-                }
+                
                 instance_extensions.push_back(ee);
             }
         }
@@ -51,13 +52,47 @@ namespace vk
             //     // validation stuff here
             // }
 
-            CI.enabledExtensionCOunt = static_cast<uint32_t>(instance_extensions.size());
+            CI.enabledExtensionCount = static_cast<uint32_t>(instance_extensions.size());
             CI.ppEnabledExtensionNames = instance_extensions.data();
         }
 
         // more validation set up here
 
         OP_SUCCESS(vkCreateInstance(&CI, allocation_callbacks, &instance));
+    }
+
+    void system::pick_physical_device()
+    {
+        uint32_t gpu_count = 0;
+        OP_SUCCESS(vkEnumeratePhysicalDevices(instance, &gpu_count, nullptr));
+
+        if (0 == gpu_count)
+        {
+            // deal with this TODO: verbose prompter
+        }
+
+        std::vector<VkPhysicalDevice> PDs(gpu_count);
+        OP_SUCCESS(vkEnumeratePhysicalDevices(instance, &gpu_count, PDs.data()));
+
+        for (const auto& pd : PDs)
+        {
+            if(is_device_suitable(pd,surface))
+            {
+                physical_device = pd;
+                break;
+            }
+        }
+
+        if (VK_NULL_HANDLE == physical_device)
+        {
+            // deal with this TODO: verbose prompter
+        }
+    }
+
+    void system::setup_logical_device()
+    {
+        logic_device.creaet(physical_device);
+        device = logic_device.device;
     }
 
     void system::prepare_frame()
@@ -95,11 +130,7 @@ namespace vk
 
     void system::setup_commandpool()
     {
-        VkCommandPoolCreateInfo CPC{}:
-        CPC.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-        CPC.queueFamilyIndex = swapchain.queue_node_index;
-        CPC.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-        OP_SUCCESS(vkCreateCommandPool(device,&CPC,allocation_callbacks,&commandpool));
+        commandpool = create_commandpool(device, swapchain.queue_node_index, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
     }
 
     void system::setup_commandbuffers()
@@ -281,7 +312,7 @@ namespace vk
         IVCI.format = depth_format;
         IVCI.subresourceRange.baseMipLevel = 0;
         IVCI.subresourceRange.levelCount = 1;
-        IVCI/subresourceRange.baseArrayLayer = 0;
+        IVCI.subresourceRange.baseArrayLayer = 0;
         IVCI.subresourceRange.layerCount = 1;
         IVCI.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
 
