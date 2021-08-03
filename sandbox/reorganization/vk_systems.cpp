@@ -91,8 +91,10 @@ namespace vk
 
     void system::setup_logical_device()
     {
-        logic_device.creaet(physical_device);
-        device = logic_device.device;
+        gpu.allocation_callbacks = allocation_callbacks;
+        gpu.physical_device = physical_device;
+        gpu.create();
+        device = gpu.device;
     }
 
     void system::prepare_frame()
@@ -112,61 +114,34 @@ namespace vk
 
     }
 
-    uint32_t system::query_memory_type(const uint32_t type_filter, const VkMemoryPropertyFlags flags)
-    {
-        VkPhysicalDeviceMemoryProperties2 MP{};
-        MP.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PROPERTIES_2;
-        vkGetPhysicalDeviceMemoryProperties2(physical_device, &MP);
-
-        for (uint32_t i = 0; i < MP.memoryProperties.memoryTypeCount; i++)
-        {
-            if((type_filter & (1 << i)) &&
-            (MP.memoryProperties.memoryTypes[i].propertyFlags & flags) == flags)
-            return i;
-        }
-
-        return 0;
-    }
+    
 
     void system::setup_commandpool()
     {
         commandpool = create_commandpool(device, swapchain.queue_node_index, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
     }
 
-    void system::setup_commandbuffers()
+    void system::setup_drawcommands()
     {
-        commandbuffers.device = device;
-        commandbuffers.commandbuffers.resize(swapchain.image_count);
-        commandbuffers.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-        commandbuffers.create(commandpool);        
-    }
-
-    void system::setup_fence(fence& _fence)
-    {
-        VkFenceCreateInfo FC{};
-        FC.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-        FC.flags = _fence.flags;
-        OP_SUCCESS(vkCreateFence(device,&FC,allocation_callbacks,&_fence.fence));
+        draw_commands.device = device;
+        draw_commands.commandbuffers.resize(swapchain.image_count);
+        draw_commands.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        draw_commands.create(commandpool);        
     }
 
     void system::setup_semaphores()
     {
-        VkSemaphoreCreateInfo SC{};
-        SC.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-
+        auto SC = info::semaphore_create_info();
         OP_SUCCESS(vkCreateSemaphore(device, &SC, allocation_callbacks, &present_complete));
         OP_SUCCESS(vkCreateSemaphore(device, &SC, allocation_callbacks, &render_complete));
     }
 
     void system::setup_wait_fences()
     {
-        wait_fences.resize(commandbuffers.size());
-
+        wait_fences.resize(draw_commands.size());
+        auto FC = info::fence_create_info(VK_FENCE_CREATE_SIGNALED_BIT);
         for(auto& f : wait_fences)
-        {
-            f.flags = VK_FENCE_CREATE_SIGNALED_BIT;
-            setup_fence(f);
-        }        
+            OP_SUCCESS(vkCreateFence(device,&FC,allocation_callbacks,&f));     
     }
 
     void system::setup_renderpass()
@@ -251,22 +226,21 @@ namespace vk
 
         attachments[1] = depthstencil.view;
 
-        VkFramebufferCreateInfo FCI{};
-        FCI.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-        FCI.pNext = nullptr;
-        FCI.renderPass = renderpass;
-        FCI.attachmentCount = 2;
-        FCI.pAttachments = attachments.data();
-        FCI.width = width;
-        FCI.height = height;
-        FCI.layers = 1;
+        auto FC = info::framebuffer_create_info();
+        FC.pNext = nullptr;
+        FC.renderPass = renderpass;
+        FC.attachmentCount = 2;
+        FC.pAttachments = attachments.data();
+        FC.width = width;
+        FC.height = height;
+        FC.layers = 1;
 
         framebuffers.resize(swapchain.image_count);
 
         for (uint32_t i = 0; i < framebuffers.size(); i++)
         {
             attachments = swapchain.buffers[i].view;
-            OP_SUCCESS(vkCreateFramebuffer(device, &FCI, allocation_callbacks, &framebuffers[i]));
+            OP_SUCCESS(vkCreateFramebuffer(device, &FC, allocation_callbacks, &framebuffers[i]));
         }       
     }
 
@@ -277,8 +251,7 @@ namespace vk
 
     void system::setup_depth_stencil()
     {
-        VkImageCreateInfo ICI{};
-        ICI.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+        auto ICI - info::image_create_info();
         ICI.imageType = VK_IMAGE_TYPE_2D;
         ICI.format = depth_format;
         ICI.extent = { width, height, 1 };
@@ -298,15 +271,13 @@ namespace vk
 
         vkGetImageMemoryRequirements2(device,&IMR,&ICI);
 
-        VkMemoryAllocateInfo MA{};
-        MA.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+        auto MA = info::memory_allocate_info();
         MA.allocationSize = MR.size;
-        MA.memoryTypeIndex = query_memory_type(MR.memoryRequirements.memoryTypeBit, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+        MA.memoryTypeIndex = query_memory_type(physical_device, MR.memoryRequirements.memoryTypeBit, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
         OP_SUCCESS(vkAllocateMemory(device&MA,allocation_callbacks,&depthstencil.memory));
         OP_SUCCESS(vkBindImageMemory(device, depthstencil.image, depthstencil.memory, 0));
 
-        VkImageViewCreateInfo IVCI{};
-        IVCI.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATEINFO;
+        auto IVCI = info::image_view_create_info();
         IVCI.viewType = VK_IMAGE_VIEW_TYPE_2D;
         IVCI.image = depthstencil.image;
         IVCI.format = depth_format;
@@ -335,9 +306,9 @@ namespace vk
             vkDestroyFramebuffer(device,framebuffers[i],allocation_callbacks);
     }
 
-    void system::destroy_commandbuffers()
+    void system::destroy_drawcommands()
     {
-        commandbuffers.destroy(commandpool);
+        draw_commands.destroy(commandpool);
     }
 
     void system::destroy_commandpool()
@@ -354,7 +325,7 @@ namespace vk
     void system::destroy_wait_fences()
     {
         for (auto& f : wait_fences)
-            vkDestroyFence(device, f.fence, allocation_callbacks);
+            vkDestroyFence(device, f, allocation_callbacks);
     }
 
     void system::resize_window()
@@ -377,8 +348,8 @@ namespace vk
         destroy_framebuffers();
         setup_framebuffers();
 
-        destroy_commandbuffers();
-        setup_commandbuffers();
+        destroy_drawcommands();
+        setup_drawcommands();
 
         vkDeviceWaitIdle(device);
 

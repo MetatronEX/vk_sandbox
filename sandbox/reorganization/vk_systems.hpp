@@ -5,14 +5,16 @@
 
 #include "vk_swapchain.hpp"
 #include "vk_depthstencil.hpp"
-#include "vk_commandbuffer.hpp"
+#include "vk_drawcommand.hpp"
 #include "vk_fence.hpp"
-#include "vk_logicaldevice.hpp"
+#include "vk_gpu.hpp"
 
 #include <vector>
 
 namespace vk
 {
+    const std::vector<const char*> device_extensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
+    
     struct system
     {
         VkInstance                      instance;
@@ -36,12 +38,12 @@ namespace vk
 
         VKSubmitInfo                    submit_info;
 
-        logical_device                  logic_device;
+        GPU                             gpu;
         swap_chain                      swapchain;
         depth_stencil                   depthstencil;
-        command_buffer                  commandbuffers;
+        draw_command                    draw_commands;
         
-        std::vector<fence>              wait_fences;
+        std::vector<VkFence>            wait_fences;
 
         void*                           features_chain {nullptr};
 
@@ -64,7 +66,7 @@ namespace vk
 
         
         std::vector<const char*>        enabled_instance_extensions;
-        std::vector<const char*>        enabled_device_extensions;
+        
 
         void setup_instance(const bool enable_validation);
         void pick_physical_device();
@@ -74,7 +76,7 @@ namespace vk
         void setup_depth_stencil();
 
         void setup_commandpool();
-        void setup_commandbuffers();
+        void setup_drawcommands();
         void setup_renderpass();
         void setup_framebuffers();
         void setup_semaphores();
@@ -89,12 +91,10 @@ namespace vk
 
         void destroy_depth_stencil();
         void destroy_framebuffers();
-        void destroy_commandbuffers();
+        void destroy_drawcommands();
         void destroy_commandpool();
         void destroy_semaphores();
         void destroy_wait_fences();
-
-        uint32_t query_memory_type(const uint32_t type_filter, const VkMemoryPropertyFlags flags);
     };
 }
 

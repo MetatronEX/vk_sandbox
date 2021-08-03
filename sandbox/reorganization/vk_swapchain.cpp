@@ -154,8 +154,7 @@ namespace vk
         buffers.resize(image_count);
         for(size_t i = 0; i < image_count; i++)
         {
-            VkImageViewCreateInfo color_attch_view{};
-            color_attch_view.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+            auto color_attch_view = info::image_view_create_info();
             color_attch_view.pNext = nullptr;
             color_attch_view.format = color_format;
             color_attch_view.components = {
