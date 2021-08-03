@@ -14,7 +14,7 @@
 namespace vk
 {
     const std::vector<const char*> device_extensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
-    
+
     struct system
     {
         VkInstance                      instance;
@@ -26,6 +26,8 @@ namespace vk
         
         VkRenderPass                    renderpass;
         VkCommandPool                   commandpool;
+
+        VkQueue                         present_queue;
 
         std::vector<VkFramebuffer>      framebuffers;
 

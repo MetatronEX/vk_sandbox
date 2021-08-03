@@ -127,7 +127,7 @@ namespace vk
 
     VkCommandPool GPU::create_commandpool(const uint32_t queue_familiy_index, const VkCommandPoolCreateFlags flags)
     {
-        return create_commandpool(device, queue_familiy_index, flags);
+        return command::create_commandpool(device, queue_familiy_index, flags);
     }
 
     VkCommandBuffer GPU::create_commandbuffer(VkCommandBufferLevel level, VkCommandPool pool, bool begin)

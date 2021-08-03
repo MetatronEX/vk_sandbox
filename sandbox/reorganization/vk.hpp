@@ -931,7 +931,7 @@ namespace vk
         return false;
     }
 
-    bool is_depth_format_filterable(VkPhysicalDevice _pd, const VkFormat _f, const VKImageTiling _t)
+    bool is_format_filterable(VkPhysicalDevice _pd, const VkFormat _f, const VKImageTiling _t)
     {
         VkFormatProperties2 FP{};
         FP.sType = VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_2;
@@ -945,117 +945,118 @@ namespace vk
         return false;
     }
 
-    VkCommandPool create_commandpool(VkDevice device, const uint32_t queue_familiy_index, const VkCommandPoolCreateFlags flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT)
+    namespace command
     {
-        VkCommandPool CP;
-        auto CPC = info::command_pool_create_info();
-        CPC.queueFamilyIndex = queue_familiy_index;
-        CPC.flags = flags;
-        OP_SUCCESS(vkCreateCommandPool(device,&CPC,allocation_callbacks,&CP));
-        return CP;
-    }
+        VkCommandPool create_commandpool(VkDevice device, const uint32_t queue_familiy_index, const VkCommandPoolCreateFlags flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT)
+        {
+            VkCommandPool CP;
+            auto CPC = info::command_pool_create_info();
+            CPC.queueFamilyIndex = queue_familiy_index;
+            CPC.flags = flags;
+            OP_SUCCESS(vkCreateCommandPool(device,&CPC,allocation_callbacks,&CP));
+            return CP;
+        }
 
-    void set_image_layout(VkCommandBuffer commandbuffer, VkImage image, VkImageAspectFlags aspect_mask, VkImageLayout old_layout, VkImageLayout new_layout,
+        void set_image_layout(VkCommandBuffer commandbuffer, VkImage image, VkImageAspectFlags aspect_mask, VkImageLayout old_layout, VkImageLayout new_layout,
+                                VkPipelineStageFlags src_mask = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 
+                                VkPipelineStageFlags dst_mask = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT)
+        {
+            VkImageSubresourceRange ISR{};
+            ISR.aspectMask = aspect_mask;
+            ISR.baseMipLevel = 0;
+            ISR.levelCount = 1;
+            ISR.layerCount = 1;
+            set_image_layout(commandbuffer, image, old_layout, new_layout, ISR, src_mask, dst_mask);
+        }
+
+        void set_image_layout(VkCommandBuffer commandbuffer, VkImage image, VkImageAspectFlags aspect_mask, VkImageLayout old_layout, VkImageLayout new_layout, VkImageSubresourceRange& subresource_range,
                             VkPipelineStageFlags src_mask = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 
                             VkPipelineStageFlags dst_mask = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT)
-    {
-        VkImageSubresourceRange ISR{};
-        ISR.aspectMask = aspect_mask;
-        ISR.baseMipLevel = 0;
-        ISR.levelCount = 1;
-        ISR.layerCount = 1;
-        set_image_layout(commandbuffer, image, old_layout, new_layout, ISR, src_mask, dst_mask);
-    }
-
-    void set_image_layout(VkCommandBuffer commandbuffer, VkImage image, VkImageAspectFlags aspect_mask, VkImageLayout old_layout, VkImageLayout new_layout, VkImageSubresourceRange& subresource_range,
-                        VkPipelineStageFlags src_mask = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 
-                        VkPipelineStageFlags dst_mask = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT)
-    {
-        auto IMB = info::image_memory_barrier();
-        IMB.oldLayout = old_layout;
-        IMB.newLayout = new_layout;
-        IMB.image = image;
-        IMB.subresourceRange = subresource_range;
-
-        switch (old_layout)
         {
-            case VK_IMAGE_LAYOUT_UNDEFINED:
-				IMB.srcAccessMask = 0;
-				break;
+            auto IMB = info::image_memory_barrier();
+            IMB.oldLayout = old_layout;
+            IMB.newLayout = new_layout;
+            IMB.image = image;
+            IMB.subresourceRange = subresource_range;
 
-			case VK_IMAGE_LAYOUT_PREINITIALIZED:
-				IMB.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
-				break;
+            switch (old_layout)
+            {
+                case VK_IMAGE_LAYOUT_UNDEFINED:
+                    IMB.srcAccessMask = 0;
+                    break;
 
-			case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL:
-				IMB.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-				break;
+                case VK_IMAGE_LAYOUT_PREINITIALIZED:
+                    IMB.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
+                    break;
 
-			case VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL:
-				IMB.srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-				break;
+                case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL:
+                    IMB.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+                    break;
 
-			case VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL:
-				IMB.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-				break;
+                case VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL:
+                    IMB.srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+                    break;
 
-			case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL:
-				IMB.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-				break;
+                case VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL:
+                    IMB.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+                    break;
 
-			case VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL:
-				IMB.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
-				break;
-			default:
-				break;
+                case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL:
+                    IMB.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+                    break;
+
+                case VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL:
+                    IMB.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+                    break;
+                default:
+                    break;
+            }
+
+            switch (new_layout)
+            {
+                case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL:
+                    IMB.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+                    break;
+
+                case VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL:
+                    IMB.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+                    break;
+
+                case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL:
+                    IMB.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+                    break;
+
+                case VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL:
+                    IMB.dstAccessMask = IMB.dstAccessMask | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+                    break;
+
+                case VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL:
+                    if (IMB.srcAccessMask == 0)
+                        IMB.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
+                    
+                    IMB.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+                    break;
+                default:
+                    break;
+            }
+
+            vkCmsPipelineBarrier(commandbuffer, src_mask, dst_mask, 0, 0, nullptr, 0, nullptr, 1, &IMB);
         }
 
-        switch (new_layout)
+        void insertImageMemoryBarrier(VkCommandBuffer commandbuffer, VkImage image, VkAccessFlags src_access, VkAccessFlags dst_access, VkImageLayout old_layout, VkImageLayout new_layout,
+                                VkPipelineStageFlags src_stage, VkPipelineStageFlags dst_stage, VkImageSubresourceRange subresource_range)
         {
-            case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL:
-				IMB.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-				break;
+            auto IMB = info::image_memory_barrier();
+            IMB.srcAccessMask = src_access;
+            IMB.dstAccessMask = dst_access;
+            IMB.oldLayout = old_layout;
+            IMB.newLayout = new_layout;
+            IMB.image = image;
+            IMB.subresourceRange = subresource_range;
 
-			case VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL:
-				IMB.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-				break;
-
-			case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL:
-				IMB.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-				break;
-
-			case VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL:
-				IMB.dstAccessMask = IMB.dstAccessMask | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-				break;
-
-			case VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL:
-				if (IMB.srcAccessMask == 0)
-					IMB.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
-				
-				IMB.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-				break;
-			default:
-				break;
+            vkCmdPipelineBarrier(commandbuffer, src_stage, dst_stage, 0, 0, nullptr, 0, nullptr, 1, &IMB);
         }
-
-        vkCmsPipelineBarrier(commandbuffer, src_mask, dst_mask, 0, 0, nullptr, 0, nullptr, 1, &IMB);
     }
-
-    void insertImageMemoryBarrier(VkCommandBuffer commandbuffer, VkImage image, VkAccessFlags src_access, VkAccessFlags dst_access, VkImageLayout old_layout, VkImageLayout new_layout,
-                            VkPipelineStageFlags src_stage, VkPipelineStageFlags dst_stage, VkImageSubresourceRange subresource_range)
-    {
-        auto IMB = info::image_memory_barrier();
-        IMB.srcAccessMask = src_access;
-        IMB.dstAccessMask = dst_access;
-        IMB.oldLayout = old_layout;
-        IMB.newLayout = new_layout;
-        IMB.image = image;
-        IMB.subresourceRange = subresource_range;
-
-        vkCmdPipelineBarrier(commandbuffer, src_stage, dst_stage, 0, 0, nullptr, 0, nullptr, 1, &IMB);
-    }
-
-    
 }
 
 #endif

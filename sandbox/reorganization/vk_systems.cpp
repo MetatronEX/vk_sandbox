@@ -111,14 +111,29 @@ namespace vk
 
     void system::submit_frame()
     {
+        auto result = swapchain.queue_present(present_queue, buffer_index, render_complete);
 
+        if (!(VK_SUCCESS == result || VK_SUBOPTIMAL_KHR == result))
+        {
+            if(VK_ERROR_OUT_OF_DATE_KHR == result)
+            {
+                resize_window();
+                return;
+            }
+            else
+            {
+                OP_SUCCESS(result);
+            }
+        }
+
+        OP_SUCCESS(vkQueueWaitIdle(present_queue));
     }
 
     
 
     void system::setup_commandpool()
     {
-        commandpool = create_commandpool(device, swapchain.queue_node_index, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
+        commandpool = command::create_commandpool(device, swapchain.queue_node_index, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
     }
 
     void system::setup_drawcommands()
