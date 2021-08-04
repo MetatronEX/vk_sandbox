@@ -1,4 +1,4 @@
-#include "vk_logicaldevice.hpp"
+#include "vk_gpu.hpp"
 
 #include <fstream>
 
