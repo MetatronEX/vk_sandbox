@@ -183,8 +183,9 @@ namespace vk
 
     void system::setup_renderpass()
     {
-        std::array<VkAttachmentDescription, 2> attachments {};
+        std::array<VkAttachmentDescription2, 2> attachments {};
         // color
+        attachments[0].sType = VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_2;
         attachments[0].format = swapchain.color_format;
         attachments[0].samples = VK_SAMPLE_COUNT_1_BIT;
         attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
@@ -194,6 +195,7 @@ namespace vk
         attachments[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         attachments[0].finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
         // depth
+        attachments[1].sType = VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_2;
         attachments[1].format = depth_format;
         attachments[1].samples = VK_SAMPLE_COUNT_1_BIT;
         attachments[1].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
@@ -225,7 +227,7 @@ namespace vk
         SP.pPreserveAttachment = nullptr;
         SP.pResolveAttachment = nullptr;
 
-        std::array<VKSubpassDependency2, 2> SPDs{};
+        std::array<VkSubpassDependency2, 2> SPDs{};
 
         SPDs[0].sType = VK_STRUCTURE_TYPE_SUBPASS_DEPENDENCY_2;
         SPDs[0].srcSubpass = VK_SUBPASS_EXTERNAL;

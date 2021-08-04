@@ -235,7 +235,7 @@ namespace vk
 
         VkMemoryRequirements2 MR{};
         MR.sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2;
-        VkbufferMemoryRequiremntsInfo2 BMR{};
+        VkBufferMemoryRequiremntsInfo2 BMR{};
         BMR.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_REQUIREMENTS_INFO_@;
         BMR.buffer = buffer;
         vkGetBufferMemoryRequirements2(device, &BMR, &MR);
