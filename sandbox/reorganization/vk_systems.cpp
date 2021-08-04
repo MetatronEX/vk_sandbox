@@ -129,8 +129,6 @@ namespace vk
         OP_SUCCESS(vkQueueWaitIdle(present_queue));
     }
 
-    
-
     void system::setup_commandpool()
     {
         commandpool = command::create_commandpool(device, swapchain.queue_node_index, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);

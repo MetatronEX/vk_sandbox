@@ -2,6 +2,9 @@
 #define COMMON_HPP
 
 #include <fstream>
+#include <optional>
+#include <iostream>
+#include <stdio.h>
 
 void fatal_exit(const char* message, const uint32_t code)
 {

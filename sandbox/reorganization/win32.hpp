@@ -6,4 +6,26 @@
 
 #include <windows.h>
 
+#include "common.hpp"
+
+namespace win32
+{
+    struct window
+    {
+        HWND        hWnd;
+        HINSTANCE   hInstance;
+
+        uint32_t    screen_width;
+        uint32_t    screen_height;
+        
+        const char* application_name;
+
+        WNDPROC     fp_wndproc;
+
+        bool        fullscreen;
+
+        void setup_window();
+    };
+}
+
 #endif

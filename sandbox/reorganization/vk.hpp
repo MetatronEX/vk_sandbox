@@ -3,7 +3,8 @@
 
 #inlcude <vulkan/vulkan.h>
 
-#include <optional>
+#include "win32.hpp"
+#include "common.hpp"
 
 #define VK_FLAGS_NONE 0
 
@@ -706,20 +707,7 @@ namespace vk
 		}
     }
 
-    VkSurfaceKHR initialize_win32_surface(HWND hWnd, VkInstance _instance, VkAllocationCallbacks* allocation_callbacks)
-    {
-        HINSTANCE hInstance = GetModuleHandle(NULL);
-
-        VkWin32SurfaceCreateInfoKHR CI{};
-        CI.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
-        CI.hInstance = hInstance;
-        CI.hwnd = hWnd;
-
-        VkSurfaceKHR surface;
-        OP_SUCCESS(vkCreateWin32SurfaceKHR(instance, &CI, allocation_callbacks, &surface));
-
-        return surface;
-    }
+    
 
     VkSurfaceCapabilitiesKHR query_surface_capabilities(VkPhysicalDevice _pd, VkSurfaceKHR _s)
     {

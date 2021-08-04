@@ -151,7 +151,7 @@ namespace vk
         return create_commandbuffer(level,begin);
     }
 
-    VkShaderModule GPU::load_shader(const char* working_path)
+    VkShaderModule GPU::load_shader_module(const char* working_path)
     {
         std::ifstream s(working_path, std::ios::binary | std::ios::in | std::ios::ate);
 

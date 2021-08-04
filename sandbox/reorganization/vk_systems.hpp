@@ -50,7 +50,7 @@ namespace vk
         void*                           features_chain {nullptr};
 
         const char*                     application_name;
-        const char*                     engine_name;
+        const char*                     engine_name {"Luminodynamics"};
 
         uint32_t                        api_version;
         uint32_t                        width;
@@ -69,7 +69,6 @@ namespace vk
         
         std::vector<const char*>        enabled_instance_extensions;
         
-
         void setup_instance(const bool enable_validation);
         void pick_physical_device();
         void setup_logical_device();

@@ -24,7 +24,7 @@ namespace vk
         VkCommandPool create_commandpool(const uint32_t queue_familiy_index, const VkCommandPoolCreateFlags flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
         VkCommandBuffer create_commandbuffer(VkCommandBufferLevel level, VkCommandPool pool, bool begin = false);
         VkCommandBuffer create_commandbuffer(VkCommandBufferLevel level, bool begin = false);
-        VkShaderModule load_shader(const char* working_path);
+        VkShaderModule load_shader_module(const char* working_path);
         void copy_buffer(buffer& dst, buffer& src, VkQueue queue, VkBufferCopy* copy_region = nullptr);
         void flush_command_buffer(VkCommandBuffer commandbuffer, VkQueue queue, VkCommandPool pool, bool free = true);
 	    void flush_command_buffer(VkCommandBuffer commandbuffer, VkQueue queue, bool free = true);
