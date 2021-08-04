@@ -891,7 +891,7 @@ namespace vk
 
     bool query_depth_format_support(VkPhysicalDevice _pd, VkFormat& _f, const bool check_sample_support = false)
     {
-        std::array<VkFormat, 5> formats - {
+        std::array<VkFormat, 5> formats = {
             VK_FORMAT_D32_SFLOAT_S8_UINT,
             VK_FORMAT_D32_SFLOAT,
             VK_FORMAT_D24_UNORM_S8_UINT,

@@ -2,7 +2,7 @@
 
 namespace win32
 {
-    void application::::setup_window()
+    void window::::setup_window()
     {
         hInstance = GetModuleHandle(NULL);
 
@@ -91,5 +91,23 @@ namespace win32
         ShowWindow(hWnd, SW_SHOW);
         SetForegroundWindow(hWnd);
         SetFocus(hWnd);
+    }
+
+    void window::setup_DPI_awareness()
+    {
+        typedef HRESULT *(__stdcall *SetProcessDpiAwarenessFunc)(PROCESS_DPI_AWARENESS);
+
+        HMODULE sh_core = LoadLibraryA("Shcore.dll");
+
+        if(sh_core)
+        {
+            SetProcessDpiAwarenessFunc setProcessDpiAwareness =
+			    (SetProcessDpiAwarenessFunc)GetProcAddress(shCore, "SetProcessDpiAwareness");
+
+            if(setProcessDpiAwareness)
+                setProcessDpiAwareness(PROCESS_PER_MONITOR_DPI_AWARE);
+
+            FreeLibrary(sh_core);
+        }
     }
 }

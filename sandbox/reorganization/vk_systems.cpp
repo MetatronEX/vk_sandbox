@@ -58,7 +58,11 @@ namespace vk
 
         // more validation set up here
 
-        OP_SUCCESS(vkCreateInstance(&CI, allocation_callbacks, &instance));
+        VkResult error = vkCreateInstance(&CI, allocation_callbacks, &instance);
+
+        if (error)
+            fatal_exit("No instance of Vulkan was created successfully: " + error_string(error), error);
+
     }
 
     void system::pick_physical_device()
@@ -95,6 +99,26 @@ namespace vk
         gpu.physical_device = physical_device;
         gpu.create();
         device = gpu.device;
+    }
+
+    void system::setup_graphics_queue()
+    {
+        vkGetDeviceQueue(device, gpu.queue_indices.graphics.value(), 0, &present_queue);
+
+        bool valid_depth = query_depth_format_support(physical_device, &depth_format);
+        assert(valid_depth);
+
+        auto SC = info::semaphore_create_info();
+
+        OP_SUCCESS(vkCreateSemaphore(device, &SC, allocation_callbacks, &present_complete));
+        OP_SUCCESS(vkCreateSemaphore(device, &SC, allocation_callbacks, &render_complete));
+
+        submit_info = info::submit_info();
+        submit_info.pWaitDstStageMask = &submit_pipeline_stages;
+        submit_info.waitSemaphoreCount = 1;
+        submit_info.pWaitSemaphores = &present_complete;
+        submit_info.signalSemaphoreCount = 1;
+        submit_info..pSignalSemaphores = &render_complete;
     }
 
     void system::prepare_frame()
@@ -370,5 +394,25 @@ namespace vk
         view_updated = true;
 
         prepared = true;
+    }
+
+    void system::destroy_system()
+    {
+        swapchain.cleanup();
+
+        if(VK_NULL_HANDLE != descriptor_pool)
+            vkDestroyDescriptorPool(device, descriptor_pool, allocation_callbacks);
+
+        destroy_drawcommands();
+        vkDestroyRenderPass(device, renderpass, allocation_callbacks);
+        destroy_framebuffers();
+        destroy_depth_stencil();
+        vkDestroyCommandPool(device, commandpool, allocation_callbacks);
+        destroy_semaphores();
+        destroy_wait_fences();
+
+        gpu.destroy();
+
+        vkDestroyInstance(instance, allocation_callbacks);
     }
 }

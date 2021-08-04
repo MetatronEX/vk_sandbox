@@ -5,6 +5,16 @@
 #include <optional>
 #include <iostream>
 #include <stdio.h>
+#include <stdlib.h>
+#include <assert.h>
+#include <vector>
+#include <array>
+#include <unordered_map>
+#include <numeric>
+#include <ctime>
+#include <chrono>
+#include <random>
+#include <algorithm>
 
 void fatal_exit(const char* message, const uint32_t code)
 {

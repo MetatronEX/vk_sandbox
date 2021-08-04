@@ -14,6 +14,8 @@ namespace vkwin32app
         static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
         void prime();
+
+        void destroy();
     };
 }
 

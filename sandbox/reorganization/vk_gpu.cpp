@@ -6,7 +6,7 @@ namespace vk
 {
     VkResult GPU::create()
     {
-        queue_familiy_indices qfi = find_queue_families(physical_device);
+        queue_indices = find_queue_families(physical_device);
 
         constexpr float default_priority = 0.0f;
 
@@ -16,7 +16,7 @@ namespace vk
         {
             VkDeviceQueueCreateInfo DQC{};
             DQC.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-            DQC.queueFamilyIndex = qfi.graphics.value();
+            DQC.queueFamilyIndex = queue_indices.graphics.value();
             DQC.queueCount = 1;
             DQC.pQueuePriorities = &default_priority;
             DQCs.push_back(DQC);
@@ -24,7 +24,7 @@ namespace vk
 
         if(VK_QUEUE_COMPUTE_BIT & requested_queue_types)
         {
-            if(qfi.compute.value() != qfi.graphics.value())
+            if(queue_indices.compute.value() != queue_indices.graphics.value())
             {
                 VkDeviceQueueCreateInfo DQC{};
                 DQC.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
@@ -38,8 +38,8 @@ namespace vk
         if(VK_QUEUE_TRANSFER_BIT & requested_queue_types)
         {
             if(
-                qfi.graphics.value() != qfi.transfer.value() &&
-                qfi.compute.value() != qfi.transfer.value()
+                queue_indices.graphics.value() != queue_indices.transfer.value() &&
+                queue_indices.compute.value() != queue_indices.transfer.value()
             )
             {
                 VkDeviceQueueCreateInfo DQC{};
@@ -100,7 +100,7 @@ namespace vk
         if(VK_SUCCESS != result)
             return result;
 
-        commandpool = create_commandpool(qfi.graphics.value());
+        commandpool = create_commandpool(queue_indices.graphics.value());
 
         return result;
     }

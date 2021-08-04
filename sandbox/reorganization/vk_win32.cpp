@@ -55,8 +55,19 @@ namespace vkwin32app
         app_window.fp_wndproc = WndProc;
 
         app_window.setup_window();
+        app_window.setup_DPI_awareness();
+
+        // it would seem like these guys sure be inside pipelines
         vk_system.setup_instance(false);
         vk_system.surface = initialize_win32_surface(app_window.hWnd, vk_system.instance, vk_system.allocation_callbacks);
         vk_system.pick_physical_device();
+        // prime pipeline required features here
+        vk_system.setup_logical_device();
+        vk_system.setup_graphics_queue();
+    }
+
+    void app::destroy()
+    {
+        vk_system.destroy_system();
     }
 }
