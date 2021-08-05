@@ -53,20 +53,24 @@ namespace vk
 
         std::vector<const char*> device_extensions(enabled_device_extensions);
 
-        if(headless_rendering)
+        if(!headless_rendering)
             device_extensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
 
-        VkPhysicalDeviceFeatures2 PDF {};
-        PDF.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+        device_properties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+        vkGetPhysicalDeviceProperties2(_pd, &device_properties);
 
-        vkGetPhysicalDeviceFeatures2(physical_device, &PDF);
-        PDF.pNext = features_chain;
+        device_memory_properties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PROPERTIES_2;
+        vkGetPhysicalDeviceMemoryProperties2(_pd, &device_memory_properties);
+        
+        device_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+        vkGetPhysicalDeviceFeatures2(physical_device, &device_features);
+        device_features.pNext = features_chain;
 
         VkDeviceCreateinfo DC{};
         DC.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
         DC.queueCreateinfoCount = static_cast<uint32_t>(DQCs.size());
         DC.pQueueCreateInfos = DQCs.data();
-        DC.pNext = &PDF;
+        DC.pNext = &device_features;
 
         // Debug stuff
 
@@ -122,7 +126,22 @@ namespace vk
 
     uint32_t GPU::query_memory_type(uint32_t type_bits, VkMemoryPropertyFlags properties, bool *found)
     {
-        return query_memory_type(physical_device, type_bits, properties, found);
+        for (uint32_t i = 0; i < device_memory_properties.memoryProperties.memoryTypeCount; i++)
+        {
+            if((type_filter & (1 << i)) &&
+            (device_memory_properties.memoryProperties.memoryTypes[i].propertyFlags & flags) == flags)
+            {
+                if(found)
+                    found = true;
+            
+                return i;
+            }            
+        }
+
+        if(found)
+            found = false;
+
+        return 0;
     }
 
     VkCommandPool GPU::create_commandpool(const uint32_t queue_familiy_index, const VkCommandPoolCreateFlags flags)
@@ -244,7 +263,7 @@ namespace vk
         MA.allocationSize = MR.memoryRequirements.size;
         MA.memoryTypeIndex = query_memory_type(physical_device, MR.memoryRequirements.memoryTypeBit, property);
 
-        VkmemoryAllocateFlagsInfoKHR MAF{};
+        VkMemoryAllocateFlagsInfoKHR MAF{};
         
         if(usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT)
         {
@@ -294,7 +313,7 @@ namespace vk
         MA.allocationSize = MR.memoryRequirements.size;
         MA.memoryTypeIndex = query_memory_type(physical_device, MR.memoryRequirements.memoryTypeBit, property);
 
-        VkmemoryAllocateFlagsInfoKHR MAF{};
+        VkMemoryAllocateFlagsInfoKHR MAF{};
         
         if(usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT)
         {

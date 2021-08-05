@@ -899,10 +899,11 @@ namespace vk
             VK_FORMAT_D16_UNORM
         };
 
+		VkFormatProperties2 FP{};
+        FP.sType = VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_2;
+
         for (auto& f : formats)
         {
-            VkFormatProperties2 FP{};
-            FP.sType = VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_2;
             vkGetPhysicalDeviceFormatProperties2(_pd, f, &FP);
 
             if(FP.formatProperties.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT)
@@ -918,6 +919,15 @@ namespace vk
 
         return false;
     }
+
+	VkFormatProperties query_format_properties(VkPhysicalDevice _pd, const VkFormat _f)
+	{
+		VkFormatProperties FP;
+		vkGetPhysicalDeviceFormatProperties(_pd, _f, &FP);
+		return FP;
+	}
+
+	
 
     bool is_format_filterable(VkPhysicalDevice _pd, const VkFormat _f, const VKImageTiling _t)
     {

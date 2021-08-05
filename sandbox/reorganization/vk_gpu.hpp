@@ -8,16 +8,21 @@ namespace vk
 {
     struct GPU 
     {
-        VkPhysicalDevice                physical_device;
-        VkDevice                        device;
+        VkPhysicalDevice                    physical_device;
+        VkDevice                            device;
 
-        vkCommandPool                   commandpool;
+        VkPhysicalDeviceProperties2         device_properties;
+        VkPhysicalDeviceMemoryProperties2   device_memory_properties;
+        VkPhysicalDeviceFeatures2           device_features;
+        //VkPhysicalDeviceFeatures2           enabled_features;
 
-        VkAllocationCallbacks*          allocation_callbacks
+        VkCommandPool                       commandpool;
 
-        std::vector<const char*>        enabled_device_extensions;
+        VkAllocationCallbacks*              allocation_callbacks
 
-        queue_familiy_indices           queue_indices;
+        queue_familiy_indices               queue_indices;
+
+        std::vector<const char*>            enabled_device_extensions;
 
         VkResult        create();
         VkFormat        query_depth_format_support(const bool check_sampling_support);

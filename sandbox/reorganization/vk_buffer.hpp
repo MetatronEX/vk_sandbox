@@ -17,13 +17,13 @@ namespace vk
         VkMemoryPropertyFlags   memory_property;
         void*                   mapped {nullptr};
 
-        VkResult map(VkDeviceSize size = VK_WHOLE_SIZE, VkDeviceSize offset = 0);
-        void unmap();
-        VkResult bind(VkDeviceSize offset = 0);
-        void setup_descriptor(VkDeviceSize size = VK_WHOLE_SIZE, VkDeviceSize offset = 0);
-        void copy_to_device(void* data, VkDeviceSize size);
-        VkResult flush(vkDeviceSize size = VK_WHOLE_SIZE, VkDeviceSize offset = 0);
-        VkResult invalidate(vkDeviceSize size = VK_WHOLE_SIZE, VkDeviceSize offset = 0);
+        VkResult    map(VkDeviceSize size = VK_WHOLE_SIZE, VkDeviceSize offset = 0);
+        void        unmap();
+        VkResult    bind(VkDeviceSize offset = 0);
+        void        setup_descriptor(VkDeviceSize size = VK_WHOLE_SIZE, VkDeviceSize offset = 0);
+        void        copy_to_device(void* data, VkDeviceSize size);
+        VkResult    flush(vkDeviceSize size = VK_WHOLE_SIZE, VkDeviceSize offset = 0);
+        VkResult    invalidate(vkDeviceSize size = VK_WHOLE_SIZE, VkDeviceSize offset = 0);
     };
 }
 

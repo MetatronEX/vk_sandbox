@@ -2,12 +2,12 @@
 
 namespace vk
 {
-    VkResult map(VkDeviceSize size, VkDeviceSize offset)
+    VkResult buffer::map(VkDeviceSize size, VkDeviceSize offset)
     {
         return vkmapMemory(device, memory, offset, size, &mapped);
     }
 
-    void unmap()
+    void buffer::unmap()
     {
         if(mapped)
         {
@@ -16,25 +16,25 @@ namespace vk
         }
     }
 
-    VkResult bind(VkDeviceSize offset)
+    VkResult buffer::bind(VkDeviceSize offset)
     {
         return vkBindBufferMemory(device, buffer, memory, offset);
     }
 
-    void setup_descriptor(VkDeviceSize size, VkDeviceSize offset)
+    void buffer::setup_descriptor(VkDeviceSize size, VkDeviceSize offset)
     {
         descriptor.offset = offset;
         descriptor.buffer = buffer;
         descriptor.range = size;
     }
 
-    void copy_to(void* data, VkDeviceSize size)
+    void buffer::copy_to_device(void* data, VkDeviceSize size)
     {
         assert(mapped);
         memcpy(mapped, data, size);
     }
 
-    VkResult flush(vkDeviceSize size, VkDeviceSize offset)
+    VkResult buffer::flush(vkDeviceSize size, VkDeviceSize offset)
     {
         auto MMR = info::mapped_memory_range();
         MMR.memory = memory;
@@ -43,7 +43,7 @@ namespace vk
         return vkFlushMappedMemoryRanges(device, 1, &MMR);
     }
 
-    VkResult invalidate(vkDeviceSize size, VkDeviceSize offset)
+    VkResult buffer::invalidate(vkDeviceSize size, VkDeviceSize offset)
     {
         auto MMR = info::mapped_memory_range();
         MMR.memory = memory;
