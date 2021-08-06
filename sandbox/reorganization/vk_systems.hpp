@@ -21,20 +21,11 @@ namespace vk
 
         VkAllocationCallbacks*          allocation_callbacks {nullptr};
         VkSurfaceKHR                    surface;
-        
-        
         VkCommandPool                   draw_commandpool;
         VkDescriptorPool                descriptor_pool {VK_NULL_HANDLE};
-
         VkQueue                         present_queue;
-
-        
-
         VkSemaphore                     present_complete;
         VkSemaphore                     render_complete;
-
-        
-
         VkQueueFlags                    requested_queue_types;
         VKSubmitInfo                    submit_info;
 
