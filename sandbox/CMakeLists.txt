@@ -3,8 +3,8 @@ get_filename_component(PROJECT_NAME ${CMAKE_CURRENT_SOURCE_DIR} NAME)
 project(${PROJECT_NAME})
 
 file(GLOB_RECURSE HEADERS 
-  include/*.h  
-  include/*.hpp
+  src/*.h  
+  src/*.hpp
 ) 
 
 file(GLOB_RECURSE SOURCES 
