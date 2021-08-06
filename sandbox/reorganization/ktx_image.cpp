@@ -167,8 +167,8 @@ namespace vk
             SC.compareOp = VK_COMPARE_OP_NEVER;
             SC.minLod = 0.f;
             SC.maxLod = (use_staging) ? static_cast<float>(mip_levels) : 0.f;
-            SC.maxAnisotropy = gpu->device_features.samplerAnisotropy ? gpu->device_properties.properties.limits.maxSamplerAnisotropy : 1.f;
-            SC.anisotropyEnable = gpu->device_features.samplerAnisotropy;
+            SC.maxAnisotropy = gpu->enabled_features.samplerAnisotropy ? gpu->device_properties.properties.limits.maxSamplerAnisotropy : 1.f;
+            SC.anisotropyEnable = gpu->enabled_features.samplerAnisotropy;
             SC.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
             OP_SUCCESS(vkCreateSampler(gpu->device, &SC, gpu->allocation_callbacks, &sampler));
 

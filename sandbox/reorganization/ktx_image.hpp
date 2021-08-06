@@ -48,19 +48,19 @@ namespace vk
                 bool force_linear = false); 
         };
 
-        struct texture_2D_array : public texture<KTX_image_policy>
-        {
-            void load_from_file(const char* filename, const VkFormat format, VkQueue copy_queue, 
-                VkImageUsageFlags usage = VK_IMAGE_USAGE_SAMPLED_BIT,
-                VkImageLayout layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-        }
+        // struct texture_2D_array : public texture<KTX_image_policy>
+        // {
+        //     void load_from_file(const char* filename, const VkFormat format, VkQueue copy_queue, 
+        //         VkImageUsageFlags usage = VK_IMAGE_USAGE_SAMPLED_BIT,
+        //         VkImageLayout layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        // }
 
-        struct texture_cubemap : public texture<KTX_image_policy>
-        {
-            void load_from_file(const char* filename, const VkFormat format, VkQueue copy_queue, 
-                VkImageUsageFlags usage = VK_IMAGE_USAGE_SAMPLED_BIT,
-                VkImageLayout layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-        }
+        // struct texture_cubemap : public texture<KTX_image_policy>
+        // {
+        //     void load_from_file(const char* filename, const VkFormat format, VkQueue copy_queue, 
+        //         VkImageUsageFlags usage = VK_IMAGE_USAGE_SAMPLED_BIT,
+        //         VkImageLayout layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        // }
     }
 }
 

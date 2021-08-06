@@ -14,7 +14,7 @@ namespace vk
         VkPhysicalDeviceProperties2         device_properties;
         VkPhysicalDeviceMemoryProperties2   device_memory_properties;
         VkPhysicalDeviceFeatures2           device_features;
-        //VkPhysicalDeviceFeatures2           enabled_features;
+        VkPhysicalDeviceFeatures2           enabled_features;
 
         VkCommandPool                       commandpool;
 
