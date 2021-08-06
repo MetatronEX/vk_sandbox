@@ -9,14 +9,14 @@ namespace vk
     {
         GPU*    gpu;
 
-        void    prime_pipeline();
-        void    try_enable_features();
-        void    build_pipeline_commands();
-        void    setup_descriptors();
+        void    setup_queried_features();
+        void    setup_depth_stencil();
+        void    setup_drawcommands();
+        void    setup_renderpass();
+        void    setup_framebuffers();
 
-        void    setup_uniform_buffers();
-        void    update_uniform_buffers();
-
+        void    prapare();
+        void    update();
         void    render();
 
         void    cleanup();

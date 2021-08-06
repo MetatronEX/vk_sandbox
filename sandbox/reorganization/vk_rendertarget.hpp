@@ -22,9 +22,7 @@ namespace vk
         GPU*					gpu;
 
         void update_descriptor();
-
 		void destroy();
-
         void load_from_buffer(void* buffer, const VkDeviceSize size, const VkFormat format,
                 const uint32_t buffer_width, const uint32_t buffer_height, VkQueue copy_queue,
                 VkFilter filter = VK_FILTER_LINEAR,

@@ -6,7 +6,6 @@
 #include "vk_swapchain.hpp"
 #include "vk_depthstencil.hpp"
 #include "vk_drawcommand.hpp"
-#include "vk_fence.hpp"
 #include "vk_gpu.hpp"
 
 #include <vector>
@@ -24,27 +23,24 @@ namespace vk
         VkAllocationCallbacks*          allocation_callbacks {nullptr};
         VkSurfaceKHR                    surface;
         
-        VkRenderPass                    renderpass;
-        VkCommandPool                   commandpool;
+        
+        VkCommandPool                   draw_commandpool;
         VkDescriptorPool                descriptor_pool {VK_NULL_HANDLE};
 
         VkQueue                         present_queue;
 
-        std::vector<VkFramebuffer>      framebuffers;
+        
 
         VkSemaphore                     present_complete;
         VkSemaphore                     render_complete;
 
-        VkFormat                        depth_format;
+        
 
         VkQueueFlags                    requested_queue_types;
-
         VKSubmitInfo                    submit_info;
 
         GPU                             gpu;
         swap_chain                      swapchain;
-        depth_stencil                   depthstencil;
-        draw_command                    draw_commands;
         
         std::vector<VkFence>            wait_fences;
         
@@ -75,26 +71,18 @@ namespace vk
         void pick_physical_device();
         void setup_logical_device();
         void setup_graphics_queue();
-
         void setup_swap_chain();
-        void setup_depth_stencil();
-
-        void setup_commandpool();
-        void setup_drawcommands();
-        void setup_renderpass();
-        void setup_framebuffers();
+        void setup_draw_commandpool();
+        void setup_drawcommand();
         void setup_semaphores();
         void setup_wait_fences();
         
         void prepare_frame();
         void submit_frame();
-
         void resize_window();
-
-        void destroy_depth_stencil();
-        void destroy_framebuffers();
+        
         void destroy_drawcommands();
-        void destroy_commandpool();
+        void destroy_draw_commandpool();
         void destroy_semaphores();
         void destroy_wait_fences();
 

@@ -7,12 +7,10 @@ namespace vk
 {
     struct draw_command
     {
-        VkDevice                        device;
         std::vector<VkCommandBuffer>    commandbuffers;
-        VkCommandBufferLevel            level;
-
-        void create(VkCommandPool commandpool);
-        void destroy(VkCommandPool commandpool);
+        
+        void allocate(VkDevice device, VkCommandPool commandpool, const VkCommandBufferLevel level);
+        void free(VkDevice device, VkCommandPool commandpool);
     };
 }
 
