@@ -3,10 +3,16 @@
 
 #include "vk.hpp"
 #include "vk_buffer.hpp"
-#include "vk_depthstencil.hpp"
 
 namespace vk
 {
+    struct depth_stencil
+    {
+        VkImage         image;
+        VkDeviceMemory  memory;
+        VkImageView     view;
+    };
+
     struct GPU 
     {
         VkPhysicalDevice                    physical_device;
@@ -29,6 +35,7 @@ namespace vk
         std::vector<const char*>            enabled_device_extensions;
 
         VkFormat                            depth_format;
+        bool                                headless_rendering {false};
 
         VkResult                            create();
         VkFormat                            query_depth_format_support(const bool check_sampling_support);

@@ -10,6 +10,9 @@ namespace vk
         GPU*    gpu;
 
         void    setup_queried_features();
+
+        void    prime();
+
         void    setup_depth_stencil();
         void    setup_drawcommands();
         void    setup_renderpass();

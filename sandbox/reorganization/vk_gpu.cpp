@@ -54,7 +54,7 @@ namespace vk
         std::vector<const char*> device_extensions(enabled_device_extensions);
 
         if(!headless_rendering)
-            device_extensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+            device_extensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME); // <-- figure sth out to make this platform agnostic
 
         device_properties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
         vkGetPhysicalDeviceProperties2(_pd, &device_properties);

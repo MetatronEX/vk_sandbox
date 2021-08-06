@@ -12,8 +12,6 @@
 
 namespace vk
 {
-    const std::vector<const char*> device_extensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
-
     struct system
     {
         VkInstance                      instance;
@@ -67,26 +65,26 @@ namespace vk
         
         std::vector<const char*>        enabled_instance_extensions;
         
-        void setup_instance(const bool enable_validation);
-        void pick_physical_device();
-        void setup_logical_device();
-        void setup_graphics_queue();
-        void setup_swap_chain();
-        void setup_draw_commandpool();
-        void setup_drawcommand();
-        void setup_semaphores();
-        void setup_wait_fences();
-        
-        void prepare_frame();
-        void submit_frame();
-        void resize_window();
-        
-        void destroy_drawcommands();
-        void destroy_draw_commandpool();
-        void destroy_semaphores();
-        void destroy_wait_fences();
-
-        void destroy_system();
+        void                            setup_instance(const bool enable_validation);
+        void                            pick_physical_device();
+        void                            setup_logical_device();
+        void                            setup_graphics_queue();
+        void                            setup_swap_chain();
+        void                            setup_draw_commandpool();
+        void                            setup_drawcommand();
+        void                            setup_semaphores();
+        void                            setup_wait_fences();
+			                            
+        void                            prepare_frame();
+        void                            submit_frame();
+        void                            resize_window();
+			                            
+        void                            destroy_drawcommands();
+        void                            destroy_draw_commandpool();
+        void                            destroy_semaphores();
+        void                            destroy_wait_fences();
+			                            
+        void                            destroy_system();
     };
 }
 

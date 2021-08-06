@@ -97,6 +97,8 @@ namespace vk
     {
         gpu.allocation_callbacks = allocation_callbacks;
         gpu.physical_device = physical_device;
+        gpu.headless_rendering = headless_rendering;
+        
         gpu.create();
         
         bool valid_depth = query_depth_format_support(physical_device, &depth_format);
