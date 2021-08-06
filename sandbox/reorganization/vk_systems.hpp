@@ -12,7 +12,8 @@
 
 namespace vk
 {
-    struct system
+    template<typename pipeline_policy>
+    struct system : public pipeline_policy
     {
         VkInstance                      instance;
         VkPhysicalDevice                physical_device;
