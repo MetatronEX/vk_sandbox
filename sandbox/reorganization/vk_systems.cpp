@@ -98,15 +98,16 @@ namespace vk
         gpu.allocation_callbacks = allocation_callbacks;
         gpu.physical_device = physical_device;
         gpu.create();
+        
+        bool valid_depth = query_depth_format_support(physical_device, &depth_format);
+        assert(valid_depth);
+
         device = gpu.device;
     }
 
     void system::setup_graphics_queue()
     {
         vkGetDeviceQueue(device, gpu.queue_indices.graphics.value(), 0, &present_queue);
-
-        bool valid_depth = query_depth_format_support(physical_device, &depth_format);
-        assert(valid_depth);
 
         auto SC = info::semaphore_create_info();
 

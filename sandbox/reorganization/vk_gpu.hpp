@@ -25,6 +25,7 @@ namespace vk
         draw_command                        draw_commands;
 
         std::vector<VkFramebuffer>          framebuffers;
+        std::vector<VkShaderModule>         shader_modules;
         std::vector<const char*>            enabled_device_extensions;
 
         VkFormat                            depth_format;
@@ -43,6 +44,7 @@ namespace vk
         VkResult                            create_buffer(VkBufferUsageFlags usage, VkMemoryPropertyFlags property, const VkDeviceSize size, VkBuffer* buffer, VkDeviceMemory* memory, void* data = nullptr);
         VkResult                            create_buffer(VkBufferUsageFlags usage, VkMemoryPropertyFlags property, buffer* buffer, const VkDeviceSize size, void* data = nullptr);
     
+        void                                destroy_shader_modules();
         void                                destroy_depth_stencil();
         void                                destroy_framebuffers();
         void                                destroy_renderpass();

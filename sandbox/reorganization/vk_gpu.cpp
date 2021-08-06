@@ -194,6 +194,8 @@ namespace vk
 
             delete[] code;
 
+            shader_modules.push_back(SM);
+
             return SM;
         }
         else
