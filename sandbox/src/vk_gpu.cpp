@@ -49,10 +49,8 @@ namespace vk
             }
         }
 
-        std::vector<const char*> device_extensions(enabled_device_extensions);
-
         if(!headless_rendering)
-            device_extensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME); // <-- figure sth out to make this platform agnostic
+            enable_device_extensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
 
         device_properties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
         vkGetPhysicalDeviceProperties2(physical_device, &device_properties);
@@ -72,7 +70,7 @@ namespace vk
 
         // Debug stuff
 
-        std::vector<const char*> supported_device_extensions;
+        
         uint32_t extension_count = 0;
         vkEnumerateDeviceExtensionProperties(physical_device, nullptr, &extension_count, nullptr);
 
@@ -84,17 +82,17 @@ namespace vk
                     supported_device_extensions.push_back(e.extensionName);
         }
 
-        if (device_extensions.size() > 0)
+        if (enable_device_extensions.size() > 0)
         {
-            for(const auto& de : device_extensions)
+            for(const auto& de : enable_device_extensions)
             {
                 if(std::find(supported_device_extensions.begin(),supported_device_extensions.end(),de) ==
                 supported_device_extensions.end())
                     std::cerr << "Enabled device extension \"" << de << "\" is not present at device level\n";
             }
 
-            DC.enabledExtensionCount = static_cast<uint32_t>(device_extensions.size());
-            DC.ppEnabledExtensionNames = device_extensions.data();
+            DC.enabledExtensionCount = static_cast<uint32_t>(enable_device_extensions.size());
+            DC.ppEnabledExtensionNames = enable_device_extensions.data();
         }
 
         VkResult result = vkCreateDevice(physical_device, &DC, allocation_callbacks, &device);
@@ -118,8 +116,7 @@ namespace vk
 
     bool GPU::query_extension_availability(const char* extension)
     {
-        auto extensions = query_available_extensions(physical_device);
-        return (std::find(extensions.begin(),extensions.end(),extension) != extensions.end());
+        return (std::find(supported_device_extensions.begin(), supported_device_extensions.end(),extension) != supported_device_extensions.end());
     }
 
     uint32_t GPU::query_memory_type(uint32_t type_bits, VkMemoryPropertyFlags properties, bool* found)

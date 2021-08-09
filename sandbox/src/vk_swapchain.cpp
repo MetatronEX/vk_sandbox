@@ -203,7 +203,7 @@ namespace vk
             PI.waitSemaphoreCount = 1;
         }
 
-        OP_SUCCESS(vkQueuePresentKHR(queue, &PI));
+        return vkQueuePresentKHR(queue, &PI);
     }
 
     void swap_chain::cleanup()

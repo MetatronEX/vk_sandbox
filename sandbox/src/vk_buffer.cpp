@@ -4,7 +4,7 @@ namespace vk
 {
     VkResult buffer::map(VkDeviceSize size, VkDeviceSize offset)
     {
-        return vkMapMemory(device, memory, offset, size, &mapped);
+        return vkMapMemory(device, memory, offset, size, 0, &mapped);
     }
 
     void buffer::unmap()

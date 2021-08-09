@@ -34,13 +34,13 @@ namespace vk
 
         std::vector<VkFramebuffer>          framebuffers;
         std::vector<VkShaderModule>         shader_modules;
-        std::vector<const char*>            enabled_device_extensions;
+        std::vector<const char*>            supported_device_extensions;
+        std::vector<const char*>            enable_device_extensions;
 
         void*                               features_chain{ nullptr };
 
         swap_chain*                         swapchain{ nullptr };
         VkFormat                            depth_format;
-        VkQueueFlags                        requested_queue { VK_QUEUE_GRAPHICS_BIT };
         VkQueueFlags                        requested_queue { VK_QUEUE_GRAPHICS_BIT };
         
         uint32_t                            width;

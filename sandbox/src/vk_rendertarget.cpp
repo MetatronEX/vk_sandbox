@@ -19,28 +19,20 @@ namespace vk
         vkFreeMemory(gpu->device, memory, gpu->allocation_callbacks);
     }
 
-    void render_target::load_from_buffer(void* buffer, const VkDeviceSize size, const VkFormat format,
+    void render_target::load_from_buffer(void* data, const VkDeviceSize size, const VkFormat format,
             const uint32_t buffer_width, const uint32_t buffer_height, VkQueue copy_queue,
-            VkFilter filter = VK_FILTER_LINEAR,
-            VkImageUsageFlags usage = VK_IMAGE_USAGE_SAMPLED_BIT,
-            VkImageLayout layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+            VkFilter filter, VkImageUsageFlags usage, VkImageLayout layout)
     {
         width = buffer_width;
         height = buffer_height;
         mip_levels = 1;
-
-        auto MA = info::memory_allocate_info();
-        VkMemoryRequirements2 MR{};
-        MR.sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2;
-        VkImageMemoryRequirementsInfo2 IMR{};
-        IMR.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_REQUIREMENTS_INFO_2;
-        
-        VkComandBuffer copy_cmd = gpu->create_commandbuffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY, true);
+                
+        VkCommandBuffer copy_cmd = gpu->create_commandbuffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY, true);
 
         buffer staging_buffer;
         
         gpu->create_buffer(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-            size, &staging_buffer, buffer) ;
+            &staging_buffer, size, data) ;
 
         VkBufferImageCopy BCR{};
 		BCR.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -78,7 +70,7 @@ namespace vk
 
         auto MA = info::memory_allocate_info();
         MA.allocationSize = MR.memoryRequirements.size;
-        MA.memoryTypeIndex = gpu->query_memory_type(MR.memoryRequirements.memoryTypeBit, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+        MA.memoryTypeIndex = gpu->query_memory_type(MR.memoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
         OP_SUCCESS(vkAllocateMemory(gpu->device, &MA, gpu->allocation_callbacks, &memory));
         OP_SUCCESS(vkBindImageMemory(gpu->device, image, memory, 0));
 
@@ -89,7 +81,7 @@ namespace vk
         ISR.layerCount = 1;
 
         command::set_image_layout(copy_cmd, image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,ISR);
-        vkCmdCopyBufferToImage(copy_cmd, staging_buffer.buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &BCRs);
+        vkCmdCopyBufferToImage(copy_cmd, staging_buffer.buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &BCR);
         image_layout = layout;
         command::set_image_layout(copy_cmd, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, image_layout, ISR);
 
@@ -108,7 +100,7 @@ namespace vk
         SC.minLod = 0.f;
         SC.maxLod = 0.f;
         SC.maxAnisotropy = 1.f;
-        OP_SUCCESS(vkCreaetSampler(gpu->device, &SC, gpu->allocation_callbacks, &sampler));
+        OP_SUCCESS(vkCreateSampler(gpu->device, &SC, gpu->allocation_callbacks, &sampler));
 
         auto IVC = info::image_view_create_info();
         IVC.viewType = VK_IMAGE_VIEW_TYPE_2D;
