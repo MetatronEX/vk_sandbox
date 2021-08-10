@@ -43,7 +43,7 @@ set(ENTT_ROOT ${CMAKE_SOURCE_DIR}/external/entt)
 set(VK_INC_DIR ${VK_ROOT}/Include)
 set(VK_LIB_DIR ${VK_ROOT}/Lib)
 
-set(GLM_INC_DIR ${GLM_ROOT}/glm)
+set(GLM_INC_DIR ${GLM_ROOT})
 set(SDL_INC_DIR ${SDL_ROOT}/include)
 
 set(ENTT_INC_DIR ${ENTT_ROOT}/single_include)

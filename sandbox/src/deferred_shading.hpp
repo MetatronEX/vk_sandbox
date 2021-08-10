@@ -4,6 +4,7 @@
 #include "vk_gpu.hpp"
 #include "stb_image.hpp"
 #include "vk_buffer.hpp"
+#include "vk_framebuffer.hpp"
 #include "math.hpp"
 
 namespace vk
@@ -28,6 +29,14 @@ namespace vk
 				} background;
 			} textures;
 
+			struct Light
+			{
+				glm::vec4 position;
+				glm::vec4 target;
+				glm::vec4 color;
+				glm::mat4 view_mtx;
+			};
+
 			struct
 			{
 				glm::mat4 proj;
@@ -35,9 +44,51 @@ namespace vk
 				glm::mat4 model;
 			} offscreen_VS_UBO;
 
+			struct
+			{
+				glm::vec4 view_position;
+				Light lights[3];
+				uint32_t shadow = 1;
+			} composition_UBO;
+
+			struct
+			{
+				buffer	offscreen;
+				buffer	composition;
+				buffer	shadow_geometry;
+			} uniform_buffers;
+
+			struct
+			{
+				VkPipeline deferred;
+				VkPipeline offscreen;
+				VkPipeline shadow;
+			} pipelines;
+
+			struct
+			{
+				VkDescriptorSet model;
+				VkDescriptorSet background;
+				VkDescriptorSet shadow;
+			} descriptor_sets;
+
+			struct
+			{
+				framebuffer* deferred;
+				framebuffer* shadow;
+			} framebuffers;
+
+			struct
+			{
+				VkCommandBuffer deferred = VK_NULL_HANDLE;
+			} command_buffers;
+
+			VkPipelineLayout		pipeline_layout;
 			VkDescriptorSet			descriptor_set;
 			VkDescriptorSetLayout	descriptor_set_layout;
+			VkSemaphore				offscreen_semaphore;
 
+			// policy interface functions
 			void setup_queried_features();
 			void prime();
 			void setup_depth_stencil();
@@ -48,6 +99,16 @@ namespace vk
 			void update();
 			void render();
 			void cleanup();
+
+			void setup_shadow_pass();
+			void setup_deferred_pass();
+			void setup_deferred_commands();
+			void setup_descriptor_pool();
+			void setup_descriptor_layout();
+			void setup_descriptor_set();
+			void prepare_pipelines();
+			void prepare_uniform_buffers();
+			void update_uniform_buffers();
 		};
 	}
 }

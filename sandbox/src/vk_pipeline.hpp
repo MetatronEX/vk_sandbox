@@ -7,7 +7,7 @@
 namespace vk
 {
     template <typename draw_policy>
-    struct pipeline : private draw_policy
+    struct pipeline : public draw_policy
     {
         void  setup_pipeline_queried_features()
         {
@@ -60,6 +60,7 @@ namespace vk
         }
 
     private:
+
         using draw_policy::setup_queried_features;
         using draw_policy::prime;
         using draw_policy::setup_depth_stencil;

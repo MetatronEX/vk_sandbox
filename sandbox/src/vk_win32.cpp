@@ -72,10 +72,7 @@ namespace vkwin32app
         vk_system.instance_extensions.push_back(VK_KHR_WIN32_SURFACE_EXTENSION_NAME);
         vk_system.setup_instance(false);
         vk_system.surface = initialize_win32_surface(app_window.hWnd, vk_system.instance, vk_system.allocation_callbacks);
-        vk_system.pick_physical_device();
-        // prime pipeline required features here
-        vk_system.setup_logical_device();
-        vk_system.setup_graphics_queue();
+        vk_system.prime();
     }
 
     void app::destroy()

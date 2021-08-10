@@ -29,10 +29,10 @@ namespace vk
         {
             for (const auto& ee : enabled_instance_extensions)
             {
-                if(std::find(supported_instance_extensions.begin(), supported_instance_extensions.end(), ee) == 
-                supported_instance_extensions.end())
+                if (std::find(supported_instance_extensions.begin(), supported_instance_extensions.end(), ee) ==
+                    supported_instance_extensions.end())
                     std::cerr << "Enabled instance extension \"" << ee << "\" is not present at instance level\n";
-                
+
                 instance_extensions.push_back(ee);
             }
         }
@@ -77,7 +77,7 @@ namespace vk
 
         for (const auto& pd : PDs)
         {
-            if(is_device_suitable(pd,surface, gpu.enabled_device_extensions))
+            if (is_device_suitable(pd, surface, gpu.supported_device_extensions))
             {
                 physical_device = pd;
                 break;
@@ -95,9 +95,10 @@ namespace vk
         gpu.allocation_callbacks = allocation_callbacks;
         gpu.physical_device = physical_device;
         gpu.headless_rendering = headless_rendering;
-        
+        gpu.queue_indices = find_queue_families(physical_device, surface);
+
         gpu.create();
-        
+
         device = gpu.device;
     }
 
@@ -122,11 +123,11 @@ namespace vk
     {
         auto [result, index] = swapchain.acquire_next_image(present_complete);
 
-        if( VK_ERROR_OUT_OF_DATE_KHR == result || VK_SUBOPTIMAL_KHR == result)
+        if (VK_ERROR_OUT_OF_DATE_KHR == result || VK_SUBOPTIMAL_KHR == result)
             resize_window();
         else
             OP_SUCCESS(result);
-        
+
         buffer_index = index;
     }
 
@@ -136,7 +137,7 @@ namespace vk
 
         if (!(VK_SUCCESS == result || VK_SUBOPTIMAL_KHR == result))
         {
-            if(VK_ERROR_OUT_OF_DATE_KHR == result)
+            if (VK_ERROR_OUT_OF_DATE_KHR == result)
             {
                 resize_window();
                 return;
@@ -152,13 +153,16 @@ namespace vk
 
     void system::setup_draw_commandpool()
     {
-        draw_commandpool = command::create_commandpool(device, swapchain.queue_node_index, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
+        auto CPC = info::command_pool_create_info();
+        CPC.queueFamilyIndex = swapchain.queue_node_index;
+        CPC.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+        OP_SUCCESS(vkCreateCommandPool(device, &CPC, allocation_callbacks, &draw_commandpool));
     }
 
     void system::setup_drawcommands()
     {
         gpu.draw_commands.commandbuffers.resize(swapchain.image_count);
-        gpu.draw_commands.allocate(device, draw_commandpool, VK_COMMAND_BUFFER_LEVEL_PRIMARY);        
+        gpu.draw_commands.allocate(device, draw_commandpool, VK_COMMAND_BUFFER_LEVEL_PRIMARY);
     }
 
     void system::setup_semaphores()
@@ -172,13 +176,15 @@ namespace vk
     {
         wait_fences.resize(gpu.draw_commands.commandbuffers.size());
         auto FC = info::fence_create_info(VK_FENCE_CREATE_SIGNALED_BIT);
-        for(auto& f : wait_fences)
-            OP_SUCCESS(vkCreateFence(device,&FC,allocation_callbacks,&f));     
+        for (auto& f : wait_fences)
+            OP_SUCCESS(vkCreateFence(device, &FC, allocation_callbacks, &f));
     }
 
     void system::setup_swap_chain()
     {
-        swapchain.create(width,height,vsync);
+        swapchain.surface = surface;
+        swapchain.create(width, height, vsync);
+        gpu.swapchain = &swapchain;
     }
 
     void system::destroy_drawcommands()
@@ -207,7 +213,7 @@ namespace vk
     {
         if (!prepared)
             return;
-        
+
         prepared = false;
         resized = true;
 
@@ -215,13 +221,17 @@ namespace vk
 
         width = new_width;
         height = new_height;
+        gpu.width = width;
+        gpu.height = height;
         setup_swap_chain();
 
         gpu.destroy_depth_stencil();
-        ///*policy*/setup_depth_stencil();
+        //pipeline_policy::setup_depth_stencil();
+        render_pipeline->setup_depth_stencil();
 
         gpu.destroy_framebuffers();
-        ///*policy*/setup_framebuffers();
+        //pipeline_policy::setup_framebuffers();
+        render_pipeline->setup_framebuffers();
 
         destroy_drawcommands();
         setup_drawcommands();
@@ -238,7 +248,7 @@ namespace vk
     {
         swapchain.cleanup();
 
-        if(VK_NULL_HANDLE != descriptor_pool)
+        if (VK_NULL_HANDLE != descriptor_pool)
             vkDestroyDescriptorPool(device, descriptor_pool, allocation_callbacks);
 
         destroy_drawcommands();
