@@ -18,13 +18,13 @@
 #include <random>
 #include <algorithm>
 
-bool file_exists(const char* filename)
+inline bool file_exists(const char* filename)
 {
     std::ifstream f(filename);
     return !f.fail();
 }
 
-uint32_t align(const uint32_t value, const uint32_t alignment)
+inline uint32_t align(const uint32_t value, const uint32_t alignment)
 {
     return (value + alignment - 1) & ~(alignment - 1);
 }

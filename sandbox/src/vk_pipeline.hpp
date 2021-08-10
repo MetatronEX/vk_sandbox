@@ -6,24 +6,70 @@
 
 namespace vk
 {
-    struct pipeline
+    template <typename draw_policy>
+    struct pipeline : private draw_policy
     {
-        GPU*    gpu;
+        void  setup_pipeline_queried_features()
+        {
+            setup_queried_features();
+        }
 
-        void    setup_queried_features();
+        void  prime_pipeline()
+        {
+            prime();
+        }
 
-        void    prime();
+        void  setup_pipeline_depth_stencil()
+        {
+            setup_depth_stencil();
+        }
 
-        void    setup_depth_stencil();
-        void    setup_drawcommands();
-        void    setup_renderpass();
-        void    setup_framebuffers();
+        void  setup__pipeline_drawcommands()
+        {
+            setup_drawcommands();
+        }
 
-        void    prapare();
-        void    update();
-        void    render();
+        void  setup_pipeline_renderpass()
+        {
+            setup_renderpass();
+        }
 
-        void    cleanup();
+        void  setup_pipeline_framebuffers()
+        {
+            setup_framebuffers();
+        }
+
+        void  prapare_pipeline()
+        {
+            prepare();
+        }
+
+        void  update_pipeline()
+        {
+            update();
+        }
+
+        void  spin_pipeline()
+        {
+            render();
+        }
+
+        void  pipeline_cleanup()
+        {
+            cleanup();
+        }
+
+    private:
+        using draw_policy::setup_queried_features;
+        using draw_policy::prime;
+        using draw_policy::setup_depth_stencil;
+        using draw_policy::setup_drawcommands;
+        using draw_policy::setup_renderpass;
+        using draw_policy::setup_framebuffers;
+        using draw_policy::prepare;
+        using draw_policy::update;
+        using draw_policy::render;
+        using draw_policy::cleanup;
     };
 }
 

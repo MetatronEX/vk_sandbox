@@ -9,7 +9,7 @@
 namespace vk
 {
     template <typename image_policy>
-	struct texture
+	struct texture : private image_policy
 	{
 		VkDescriptorImageInfo	descriptor;
         VkImage					image;
@@ -24,6 +24,10 @@ namespace vk
 		uint32_t				layer_count;
 		uint8_t*                image_binary;
         GPU*					gpu;
+
+        using image_policy::image_header_ptr;
+        using image_policy::load_image_file;
+        using image_policy::destroy_header;
 
 		void update_descriptor()
         {
@@ -41,22 +45,7 @@ namespace vk
             vkFreeMemory(gpu->device, memory, gpu->allocation_callbacks);
         }
 
-        image_policy::image_header_ptr load_image(const char* filename)
-        {
-            image_policy::image_header_ptr header = image_policy::load_image_file(filename, image_info& info);
-            width = info.image_width;
-            height = info.image_height;
-            mip_levels = info.image_mip_level;
-            size = info.image_size;
-            image_binary = info.image_binary;
-
-            return header;
-        }
-
-        void destroy_image_header(image_policy::image_header_ptr header)
-        {
-            image_policy::destroy_image_header(header);
-        }
+        
 	};
 }
 

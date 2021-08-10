@@ -1,50 +1,40 @@
-#include "ktx_image.hpp"
+#include "stb_image.hpp"
+#undef max
 
 namespace vk
 {
-    namespace ktx
-    {
-        void texture_2D::load_from_file(const char* filename, const VkFormat format, VkQueue copy_queue, 
-                VkImageUsageFlags usage, VkImageLayout layout,bool force_linear)
-        {
-            KTX_image_policy::image_header_ptr header;
-            image_info info;
-            header = load_image_file(filename,info);
+	namespace stb
+	{
+		void texture_2D::load_from_file(const char* filename, const VkFormat format, VkQueue copy_queue,
+			VkImageUsageFlags usage, VkImageLayout layout, bool force_linear)
+		{
+			STB_image_policy::image_header_ptr header = load_image(filename);
 
-            size = info.image_size;
-            width = info.image_width;
-            height = info.image_height;
-            mip_levels = info.image_mip_level;
-            layer_count = info.image_layer_count;
-            image_binary = info.image_binary;
+			bool use_staging = !force_linear;
 
-            bool use_staging = !force_linear;
+			VkCommandBuffer copy_cmd = gpu->create_commandbuffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY, true);
 
-            VkCommandBuffer copy_cmd = gpu->create_commandbuffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY, true);
-
-            if(use_staging)
+            if (use_staging)
             {
                 buffer staging_buffer;
                 staging_buffer.device = gpu->device;
 
-                OP_SUCCESS(gpu->create_buffer(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, 
+                OP_SUCCESS(gpu->create_buffer(VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                    size, &staging_buffer, static_cast<void*>(image_binary)));
+                    &staging_buffer, size, static_cast<void*>(image_binary)));
 
                 std::vector<VkBufferImageCopy> BCRs;
 
                 for (uint32_t i = 0; i < mip_levels; i++)
                 {
-                    ktx_size_t offset;
-                    KTX_error_code result = ktxTexture_GetImageOffset(header, i, 0, 0, &offset);
-                    assert(KTX_SUCCESS == result);
+                    size_t offset = 0;
 
                     VkBufferImageCopy BCR{};
                     BCR.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
                     BCR.imageSubresource.mipLevel = i;
                     BCR.imageSubresource.baseArrayLayer = 0;
                     BCR.imageSubresource.layerCount = 1;
-                    BCR.imageExtent.width = std::max(1u, width, >> i);
+                    BCR.imageExtent.width = std::max(1u, width >> i);
                     BCR.imageExtent.height = std::max(1u, height >> i);
                     BCR.imageExtent.depth = 1;
                     BCR.bufferOffset = offset;
@@ -64,14 +54,14 @@ namespace vk
                 IC.extent = { width, height, 1 };
                 IC.usage = usage;
 
-                if(!(VK_IMAGE_USAGE_TRANSFER_DST_BIT & IC.usage))
+                if (!(VK_IMAGE_USAGE_TRANSFER_DST_BIT & IC.usage))
                     IC.usage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
                 OP_SUCCESS(vkCreateImage(gpu->device, &IC, gpu->allocation_callbacks, &image));
 
                 VkMemoryRequirements2 MR{};
-			    MR.sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2;
+                MR.sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2;
                 VkImageMemoryRequirementsInfo2 IMR{};
-			    IMR.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_REQUIREMENTS_INFO_2;
+                IMR.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_REQUIREMENTS_INFO_2;
                 IMR.image = image;
                 vkGetImageMemoryRequirements2(gpu->device, &IMR, &MR);
 
@@ -87,8 +77,8 @@ namespace vk
                 ISR.levelCount = mip_levels;
                 ISR.layerCount = 1;
 
-                command::set_image_layout(copy_cmd, image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,ISR);
-                vkCmdCopyBufferToImage(copy_cmd, staging_buffer.buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 
+                command::set_image_layout(copy_cmd, image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, ISR);
+                vkCmdCopyBufferToImage(copy_cmd, staging_buffer.buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                     static_cast<uint32_t>(BCRs.size()), BCRs.data());
                 image_layout = layout;
                 command::set_image_layout(copy_cmd, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, image_layout, ISR);
@@ -98,7 +88,7 @@ namespace vk
             }
             else
             {
-                auto FP = query_format_properties(gpu->physical_device,format);
+                auto FP = query_format_properties(gpu->physical_device, format);
                 assert(FP.linearTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT);
 
                 VkImage         mappable_image;
@@ -119,23 +109,23 @@ namespace vk
                 OP_SUCCESS(vkCreateImage(gpu->device, &IC, gpu->allocation_callbacks, &mappable_image));
 
                 VkMemoryRequirements2 MR{};
-			    MR.sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2;
+                MR.sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2;
                 VkImageMemoryRequirementsInfo2 IMR{};
-			    IMR.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_REQUIREMENTS_INFO_2;
+                IMR.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_REQUIREMENTS_INFO_2;
                 IMR.image = mappable_image;
                 vkGetImageMemoryRequirements2(gpu->device, &IMR, &MR);
 
                 auto MA = info::memory_allocate_info();
                 MA.allocationSize = MR.memoryRequirements.size;
-                MA.memoryTypeIndex = gpu->query_memory_type(MR.memoryRequirements.memoryTypeBits, 
+                MA.memoryTypeIndex = gpu->query_memory_type(MR.memoryRequirements.memoryTypeBits,
                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-                
+
                 OP_SUCCESS(vkAllocateMemory(gpu->device, &MA, gpu->allocation_callbacks, &mappable_memory));
                 OP_SUCCESS(vkBindImageMemory(gpu->device, mappable_image, mappable_memory, 0));
 
                 VkImageSubresource IS{};
                 IS.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-                IS.mipLevel = 0; 
+                IS.mipLevel = 0;
 
                 VkSubresourceLayout  SL{};
                 void* data;
@@ -154,7 +144,7 @@ namespace vk
                 gpu->flush_command_buffer(copy_cmd, copy_queue);
             }
 
-            destrpy_image_header(header);
+            this->destroy_image_header(header);
 
             auto SC = info::sampler_create_info();
             SC.magFilter = VK_FILTER_LINEAR;
@@ -182,6 +172,6 @@ namespace vk
             OP_SUCCESS(vkCreateImageView(gpu->device, &IVC, gpu->allocation_callbacks, &view));
 
             update_descriptor();
-        }
-    }
+		}
+	}
 }
