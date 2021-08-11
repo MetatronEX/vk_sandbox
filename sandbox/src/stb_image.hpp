@@ -44,36 +44,14 @@ namespace vk
 				stbi_image_free(header);
 				header = nullptr;
 			}
+
+			size_t get_offset(image_header_ptr header, const uint32_t level)
+			{
+				return 0;
+			}
 		};
 
-		using STB_texture = texture<STB_image_policy>;
-
-		struct texture_2D : private STB_texture
-		{
-			image_header_ptr load_image(const char* filename)
-			{
-				image_info info;
-
-				image_header_ptr header = load_image_file(filename, info);
-				width = info.image_width;
-				height = info.image_height;
-				mip_levels = info.image_mip_level;
-				size = info.image_size;
-				image_binary = info.image_binary;
-
-				return header;
-			}
-
-			void destroy_image_header(image_header_ptr header)
-			{
-				destroy_header(header);
-			}
-
-			void load_from_file(const char* filename, const VkFormat format, VkQueue copy_queue,
-				VkImageUsageFlags usage = VK_IMAGE_USAGE_SAMPLED_BIT,
-				VkImageLayout layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-				bool force_linear = false);
-		};
+		using texture2D = texture_2D<STB_image_policy>;
 	}
 }
 

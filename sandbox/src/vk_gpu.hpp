@@ -27,6 +27,7 @@ namespace vk
         VkPhysicalDeviceFeatures2           enabled_features;
         VkCommandPool                       commandpool;
         VkRenderPass                        renderpass;
+        VkDescriptorPool                    descriptorpool { VK_NULL_HANDLE };
 
         queue_family_indices                queue_indices;
         depth_stencil                       depthstencil;
@@ -42,6 +43,7 @@ namespace vk
         swap_chain*                         swapchain{ nullptr };
         VkFormat                            depth_format;
         VkQueueFlags                        requested_queue { VK_QUEUE_GRAPHICS_BIT };
+        VkPipelineStageFlags                submit_pipeline_stages { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
         
         uint32_t                            width;
         uint32_t                            height;

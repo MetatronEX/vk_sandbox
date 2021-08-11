@@ -373,6 +373,8 @@ namespace vk
 
     void GPU::destroy()
     {
+        destroy_shader_modules();
+
         if (commandpool)
             vkDestroyCommandPool(device, commandpool, allocation_callbacks);
         if (device)
@@ -523,5 +525,11 @@ namespace vk
             attachments[0] = swapchain->buffers[i].view;
             OP_SUCCESS(vkCreateFramebuffer(device, &FC, allocation_callbacks, &framebuffers[i]));
         }       
+    }
+
+    void GPU::destroy_shader_modules()
+    {
+        for (auto& m : shader_modules)
+            vkDestroyShaderModule(device, m, allocation_callbacks);
     }
 }

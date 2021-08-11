@@ -47,6 +47,8 @@ target_include_directories(${PROJECT_NAME} PRIVATE
   ${GLFW_INC_DIR}
   ${STB_INC_DIR}
   ${TINYOBJ_DIR}
+  ${TINYGLTF_INC_DIR}
+  ${KTX_INC_DIR}
   ${INCLUDE_DIR}
 )
 

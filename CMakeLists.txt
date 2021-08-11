@@ -40,6 +40,9 @@ set(SDL_ROOT ${CMAKE_SOURCE_DIR}/external/SDL)
 set(GLFW_ROOT ${CMAKE_SOURCE_DIR}/external/glfw)
 set(ENTT_ROOT ${CMAKE_SOURCE_DIR}/external/entt)
 
+set(TINYGLTF_ROOT ${CMAKE_SOURCE_DIR}/external/tinygltf)
+set(KTX_ROOT ${CMAKE_SOURCE_DIR}/external/KTX-Software)
+
 set(VK_INC_DIR ${VK_ROOT}/Include)
 set(VK_LIB_DIR ${VK_ROOT}/Lib)
 
@@ -48,6 +51,10 @@ set(SDL_INC_DIR ${SDL_ROOT}/include)
 
 set(ENTT_INC_DIR ${ENTT_ROOT}/single_include)
 set(GLFW_INC_DIR ${GLFW_ROOT}/include)
+
+set(TINYGLTF_INC_DIR ${TINYGLTF_ROOT})
+set(KTX_INC_DIR ${KTX_ROOT}/include)
+
 # get the precompiled lib for now
 set(GLFW_LIB_DIR ${CMAKE_SOURCE_DIR}/external/install/lib-vc2019)
 
