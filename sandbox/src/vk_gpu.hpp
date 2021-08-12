@@ -28,7 +28,7 @@ namespace vk
         VkCommandPool                       commandpool;
         VkRenderPass                        renderpass;
         VkDescriptorPool                    descriptorpool { VK_NULL_HANDLE };
-
+        VkPipelineCache                     pipeline_cache { VK_NULL_HANDLE };
         queue_family_indices                queue_indices;
         depth_stencil                       depthstencil;
         draw_command                        draw_commands;
@@ -54,7 +54,7 @@ namespace vk
         VkFormat                            query_for_depth_format_support(const bool check_sampling_support);
         bool                                query_extension_availability(const char* extension);
         uint32_t                            query_memory_type(uint32_t type_bits, VkMemoryPropertyFlags properties, bool *found = nullptr);
-        VkCommandPool                       create_commandpool(const uint32_t queue_familiy_index, const VkCommandPoolCreateFlags flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
+        VkCommandPool                       create_commandpool(const uint32_t queue_familiy_index, VkCommandPoolCreateFlags flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
         VkCommandBuffer                     create_commandbuffer(VkCommandBufferLevel level, VkCommandPool pool, bool begin = false);
         VkCommandBuffer                     create_commandbuffer(VkCommandBufferLevel level, bool begin = false);
         VkShaderModule                      load_shader_module(const char* working_path);

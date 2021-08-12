@@ -24,7 +24,7 @@ namespace vk
             setup_depth_stencil();
         }
 
-        void  setup__pipeline_drawcommands()
+        void  setup_pipeline_drawcommands()
         {
             setup_drawcommands();
         }

@@ -6,12 +6,14 @@
 #include "win32.hpp"
 #include "vk_systems.hpp"
 
+#include "deferred_shading.hpp"
+
 namespace vkwin32app
 {
     struct app
     {
-        win32::window   app_window;
-        vk::system      vk_system;
+        win32::window                                 app_window;
+        vk::system<vk::policy::deferred_shading>      vk_system;
 
         static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
         LRESULT CALLBACK appWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);

@@ -19,13 +19,13 @@ namespace vk
 			{
 				struct
 				{
-					stb::texture_2D albedo;
-					stb::texture_2D normal;
+					stb::texture2D albedo;
+					stb::texture2D normal;
 				} model;
 				struct
 				{
-					stb::texture_2D albedo;
-					stb::texture_2D normal;
+					stb::texture2D albedo;
+					stb::texture2D normal;
 				} background;
 			} textures;
 
@@ -74,8 +74,8 @@ namespace vk
 
 			struct
 			{
-				framebuffer* deferred;
-				framebuffer* shadow;
+				framebuffer::framebuffer deferred;
+				framebuffer::framebuffer shadow;
 			} framebuffers;
 
 			struct
@@ -88,6 +88,9 @@ namespace vk
 			VkDescriptorSetLayout	descriptor_set_layout;
 			VkSemaphore				offscreen_semaphore;
 
+			const float             depth_bias_constant { 1.25f };
+			const float             depth_bias_slope{ 1.75f };
+
 			// policy interface functions
 			void setup_queried_features();
 			void prime();
@@ -99,7 +102,8 @@ namespace vk
 			void update();
 			void render();
 			void cleanup();
-
+			
+			// unique
 			void setup_shadow_pass();
 			void setup_deferred_pass();
 			void setup_deferred_commands();
@@ -109,6 +113,8 @@ namespace vk
 			void prepare_pipelines();
 			void prepare_uniform_buffers();
 			void update_uniform_buffers();
+
+			void render_scene(VkCommandBuffer cmd_buffer, bool shadow);
 		};
 	}
 }

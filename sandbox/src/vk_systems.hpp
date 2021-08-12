@@ -42,7 +42,7 @@ namespace vk
 
         VkPipelineStageFlags            submit_pipeline_stages {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
 
-        uint32_t                        api_version;
+        uint32_t                        api_version { VK_API_VERSION_1_2 };
         uint32_t                        width;
         uint32_t                        height;
         uint32_t                        new_width;
@@ -143,7 +143,7 @@ namespace vk
 
             if (0 == gpu_count)
             {
-                // deal with this TODO: verbose prompter
+                fatal_exit("No GPU found!", -1);
             }
 
             std::vector<VkPhysicalDevice> PDs(gpu_count);
@@ -160,7 +160,7 @@ namespace vk
 
             if (VK_NULL_HANDLE == physical_device)
             {
-                // deal with this TODO: verbose prompter
+                fatal_exit("No proper GPU support!", -1);
             }
         }
 

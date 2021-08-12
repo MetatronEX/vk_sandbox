@@ -139,7 +139,7 @@ namespace vk
         return 0;
     }
 
-    VkCommandPool GPU::create_commandpool(const uint32_t queue_familiy_index, const VkCommandPoolCreateFlags flags)
+    VkCommandPool GPU::create_commandpool(const uint32_t queue_familiy_index, VkCommandPoolCreateFlags flags)
     {
         VkCommandPool CP;
         auto CPC = info::command_pool_create_info();
