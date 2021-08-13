@@ -271,6 +271,8 @@ namespace vk
 			auto empty_input_state = info::pipeline_vertex_input_state_create_info();
 			GPC.pVertexInputState = &empty_input_state;
 			OP_SUCCESS(vkCreateGraphicsPipelines(gpu->device, gpu->pipeline_cache, 1, &GPC, gpu->allocation_callbacks, &pipelines.deferred));
+
+
 		}
 
 		void deferred_shading::prepare_uniform_buffers() 
